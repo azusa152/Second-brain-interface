@@ -25,6 +25,18 @@ open http://localhost:6333/dashboard
 make down
 ```
 
+## Dashboard
+
+A built-in monitoring dashboard is available at:
+
+```
+http://localhost:8000/dashboard
+```
+
+It shows real-time service health, index statistics, recent file watcher events,
+a search playground for testing queries, and a vault browser with note link
+exploration. The dashboard auto-refreshes every 5 seconds.
+
 ## Port Configuration
 
 All host-facing ports are configurable via environment variables to avoid conflicts
@@ -83,6 +95,8 @@ Run `make help` to see all available targets.
 | `POST` | `/search` | Semantic + keyword hybrid search |
 | `POST` | `/index/rebuild` | Trigger full vault re-index |
 | `GET` | `/index/status` | Index health and statistics |
+| `GET` | `/index/events` | Recent file watcher events |
+| `GET` | `/index/notes` | List all indexed notes |
 | `GET` | `/note/{path}/links` | Backlinks and outlinks for a note |
 
 ### Search your vault
@@ -171,6 +185,7 @@ backend/
 ├── application/     # Use-case orchestration (services)
 ├── infrastructure/  # External system adapters (Qdrant, file watcher)
 └── api/             # FastAPI route handlers
+frontend/            # Monitoring dashboard (static HTML/CSS/JS)
 ```
 
 See [docs/design.md](docs/design.md) for the full technical design.

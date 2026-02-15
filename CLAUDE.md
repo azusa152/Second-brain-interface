@@ -1,11 +1,11 @@
 # OpenClaw-Obsidian Knowledge Bridge
 
-**Second Brain Interface** is a local RAG middleware that grants OpenClaw (AI Agent) semantic understanding and retrieval capabilities over your Obsidian vault. It enables the agent to cite personal knowledge, past decisions, and technical documentation without manual context switching.
+**Second Brain Interface** is a local RAG middleware that grants OpenClaw (AI Agent) semantic understanding and retrieval capabilities over your Obsidian vault. It enables the agent to cite personal knowledge, past decisions, and technical documentation without manual context switching. Includes a built-in monitoring dashboard (`/dashboard`) for service health, index stats, search playground, and vault browsing.
 
 ## Tech Stack
 - **Backend:** FastAPI (Python 3.12+)
-- **Search Engine:** Elasticsearch 8.x (unified vector + keyword + hybrid search)
-- **Embedding Model:** sentence-transformers (`all-MiniLM-L6-v2`, local, 384 dims)
+- **Search Engine:** Qdrant (unified vector + keyword + hybrid search)
+- **Embedding Model:** fastembed (`all-MiniLM-L6-v2`, local, 384 dims)
 - **File Watcher:** watchdog
 - **Infrastructure:** Docker Compose (multi-container)
 - **Testing:** pytest

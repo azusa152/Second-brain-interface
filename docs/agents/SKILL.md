@@ -120,7 +120,65 @@ Get all outgoing wikilinks and backlinks for a specific note. Useful for graph e
 
 **Errors**: 404 (note not in index)
 
-### 5. Health Check — `GET /health`
+### 5. Watcher Events — `GET /index/events`
+
+List recent file watcher events (newest first). Useful for understanding what changes the watcher has detected and verifying that live indexing is working.
+
+**Query Parameters**:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `limit` | int | 50 | Number of events to return (1-100) |
+
+**Example**: `GET /index/events?limit=10`
+
+**Response** (200):
+```json
+{
+  "events": [
+    {
+      "event_type": "modified",
+      "file_path": "notes/adr-005.md",
+      "timestamp": "2025-02-15T10:32:00Z",
+      "dest_path": null
+    },
+    {
+      "event_type": "moved",
+      "file_path": "drafts/idea.md",
+      "timestamp": "2025-02-15T10:31:00Z",
+      "dest_path": "notes/idea.md"
+    }
+  ],
+  "total": 2
+}
+```
+
+Event types: `created`, `modified`, `deleted`, `moved`. The `dest_path` field is only populated for `moved` events.
+
+### 6. Indexed Notes — `GET /index/notes`
+
+List all notes currently in the index with their paths and titles. Useful for verifying index coverage and browsing available content.
+
+**Request**: No parameters.
+
+**Response** (200):
+```json
+{
+  "notes": [
+    {
+      "note_path": "notes/adr-005.md",
+      "note_title": "ADR-005: Database Migration Strategy"
+    },
+    {
+      "note_path": "concepts/flyway.md",
+      "note_title": "flyway"
+    }
+  ],
+  "total": 2
+}
+```
+
+### 7. Health Check — `GET /health`
 
 Verify the service is running.
 

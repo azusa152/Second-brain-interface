@@ -11,8 +11,6 @@ from qdrant_client.models import (
     FusionQuery,
     MatchAny,
     MatchValue,
-    NamedSparseVector,
-    NamedVector,
     PointStruct,
     Prefetch,
     SparseVector as QdrantSparseVector,
@@ -304,18 +302,15 @@ class QdrantAdapter:
             collection_name=QDRANT_COLLECTION_NAME,
             prefetch=[
                 Prefetch(
-                    query=NamedVector(name="dense", vector=query_vector),
+                    query=query_vector,
                     using="dense",
                     limit=top_k * 2,
                     score_threshold=threshold,
                 ),
                 Prefetch(
-                    query=NamedSparseVector(
-                        name="sparse",
-                        vector=QdrantSparseVector(
-                            indices=sparse_vector.indices,
-                            values=sparse_vector.values,
-                        ),
+                    query=QdrantSparseVector(
+                        indices=sparse_vector.indices,
+                        values=sparse_vector.values,
                     ),
                     using="sparse",
                     limit=top_k * 2,
