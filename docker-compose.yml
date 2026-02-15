@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "${SBI_API_PORT:-8000}:8000"
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OBSIDIAN_VAULT_PATH=/vault
@@ -24,8 +24,8 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.13.2
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "${SBI_QDRANT_HTTP_PORT:-6333}:6333"
+      - "${SBI_QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:

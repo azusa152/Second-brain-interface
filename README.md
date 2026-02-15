@@ -25,6 +25,36 @@ open http://localhost:6333/dashboard
 make down
 ```
 
+## Port Configuration
+
+All host-facing ports are configurable via environment variables to avoid conflicts
+with other services on the same machine. Defaults match the standard ports:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SBI_API_PORT` | `8000` | Backend API port |
+| `SBI_QDRANT_HTTP_PORT` | `6333` | Qdrant HTTP / dashboard port |
+| `SBI_QDRANT_GRPC_PORT` | `6334` | Qdrant gRPC port |
+
+To customize, copy `.env.example` to `.env` and set the desired values:
+
+```bash
+cp .env.example .env
+```
+
+```bash
+# Example: shift all ports to avoid conflicts
+SBI_API_PORT=8080
+SBI_QDRANT_HTTP_PORT=16333
+SBI_QDRANT_GRPC_PORT=16334
+```
+
+Then restart the services:
+
+```bash
+make down && make up
+```
+
 ## Local Development
 
 ```bash

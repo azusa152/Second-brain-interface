@@ -4,7 +4,7 @@
 
 This skill gives OpenClaw semantic search and graph traversal over the user's Obsidian vault. Use it to find relevant notes, cite past decisions, retrieve technical documentation, and explore note relationships — all without manual context switching.
 
-**Base URL**: `http://localhost:8000`
+**Base URL**: `http://localhost:8000` (default; configurable via `SBI_API_PORT` in `.env`)
 
 ## Constraints
 
