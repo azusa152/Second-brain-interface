@@ -135,6 +135,33 @@ class TestGetStatus:
         assert status.watcher_running is False
 
 
+class TestGetIndexedNotes:
+    def test_get_indexed_notes_should_delegate_to_qdrant(self) -> None:
+        from backend.domain.models import IndexedNoteItem
+
+        service, mock_qdrant, _ = _make_service()
+        mock_qdrant.get_indexed_notes.return_value = [
+            IndexedNoteItem(note_path="notes/a.md", note_title="A"),
+            IndexedNoteItem(note_path="notes/b.md", note_title="B"),
+        ]
+
+        notes = service.get_indexed_notes()
+
+        mock_qdrant.get_indexed_notes.assert_called_once()
+        assert len(notes) == 2
+        assert notes[0].note_path == "notes/a.md"
+        assert notes[0].note_title == "A"
+        assert notes[1].note_path == "notes/b.md"
+
+    def test_get_indexed_notes_should_return_empty_list(self) -> None:
+        service, mock_qdrant, _ = _make_service()
+        mock_qdrant.get_indexed_notes.return_value = []
+
+        notes = service.get_indexed_notes()
+
+        assert notes == []
+
+
 class TestEventRecording:
     def test_on_file_changed_should_record_created_event_for_new_file(self) -> None:
         event_log = EventLog()

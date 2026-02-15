@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timezone
 
 from backend.domain.constants import WATCH_EXTENSIONS
-from backend.domain.models import IndexRebuildResponse, IndexStatus
+from backend.domain.models import IndexRebuildResponse, IndexStatus, IndexedNoteItem
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.debouncer import Debouncer
 from backend.infrastructure.embedding import EmbeddingService
@@ -165,6 +165,10 @@ class IndexService:
     def get_recent_events(self, limit: int = 50) -> list[WatcherEvent]:
         """Return the most recent watcher events, newest first."""
         return self._event_log.get_recent(limit)
+
+    def get_indexed_notes(self) -> list[IndexedNoteItem]:
+        """Return deduplicated list of indexed notes with path and title."""
+        return self._qdrant.get_indexed_notes()
 
     def get_status(self) -> IndexStatus:
         """Return current index statistics."""

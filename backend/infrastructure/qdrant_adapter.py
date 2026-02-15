@@ -26,7 +26,7 @@ from backend.domain.constants import (
     QDRANT_LINK_COLLECTION_NAME,
     SIMILARITY_THRESHOLD,
 )
-from backend.domain.models import NoteChunk, SearchResultItem, WikiLink
+from backend.domain.models import IndexedNoteItem, NoteChunk, SearchResultItem, WikiLink
 from backend.infrastructure.embedding import SparseVector
 from backend.logging_config import get_logger
 
@@ -243,27 +243,49 @@ class QdrantAdapter:
 
     def get_indexed_note_paths(self) -> set[str]:
         """Return all unique note_paths in the chunks collection."""
-        note_paths: set[str] = set()
+        rows = self._scroll_chunk_payloads(["note_path"])
+        return {
+            r["note_path"]
+            for r in rows
+            if r.get("note_path")
+        }
+
+    def get_indexed_notes(self) -> list[IndexedNoteItem]:
+        """Return deduplicated list of indexed notes with path and title."""
+        rows = self._scroll_chunk_payloads(["note_path", "note_title"])
+        seen: dict[str, str] = {}
+        for r in rows:
+            path = r.get("note_path", "")
+            if path and path not in seen:
+                seen[path] = r.get("note_title", "")
+        return [
+            IndexedNoteItem(note_path=path, note_title=title)
+            for path, title in sorted(seen.items())
+        ]
+
+    def _scroll_chunk_payloads(self, fields: list[str]) -> list[dict]:
+        """Scroll the chunks collection and return payload dicts for given fields."""
+        results: list[dict] = []
         offset = None
 
         while True:
-            result = self.client.scroll(
+            batch = self.client.scroll(
                 collection_name=QDRANT_COLLECTION_NAME,
                 limit=100,
                 offset=offset,
-                with_payload=["note_path"],
+                with_payload=fields,
                 with_vectors=False,
             )
-            points, next_offset = result
+            points, next_offset = batch
             for point in points:
-                if point.payload and "note_path" in point.payload:
-                    note_paths.add(point.payload["note_path"])
+                if point.payload:
+                    results.append(point.payload)
 
             if next_offset is None:
                 break
             offset = next_offset
 
-        return note_paths
+        return results
 
     def hybrid_search(
         self,
