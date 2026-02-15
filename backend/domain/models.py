@@ -82,7 +82,11 @@ class SearchResponse(BaseModel):
     query: str
     results: list[SearchResultItem]
     related_notes: list[RelatedNote]
-    total_hits: int
+    total_hits: int = Field(
+        description="Number of results returned after top-k and threshold filtering. "
+        "Does not represent the total number of matches in the index."
+    )
+    # TODO: Phase 6 — implement true total_hits via count query when hybrid search is added.
     search_time_ms: float
 
 

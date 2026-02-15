@@ -16,8 +16,9 @@ from backend.domain.constants import (
     EMBEDDING_DIM,
     QDRANT_COLLECTION_NAME,
     QDRANT_LINK_COLLECTION_NAME,
+    SIMILARITY_THRESHOLD,
 )
-from backend.domain.models import NoteChunk, WikiLink
+from backend.domain.models import NoteChunk, SearchResultItem, WikiLink
 from backend.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -198,6 +199,40 @@ class QdrantAdapter:
             offset = next_offset
 
         return note_paths
+
+    def vector_search(
+        self,
+        query_vector: list[float],
+        top_k: int,
+        threshold: float = SIMILARITY_THRESHOLD,
+    ) -> list[SearchResultItem]:
+        """Dense vector search against the chunks collection.
+
+        Returns results sorted by score descending, filtered by threshold.
+        """
+        results = self.client.search(
+            collection_name=QDRANT_COLLECTION_NAME,
+            query_vector=("dense", query_vector),
+            limit=top_k,
+            score_threshold=threshold,
+            with_payload=True,
+        )
+
+        items: list[SearchResultItem] = []
+        for point in results:
+            payload = point.payload or {}
+            items.append(
+                SearchResultItem(
+                    chunk_id=payload.get("chunk_id", ""),
+                    note_path=payload.get("note_path", ""),
+                    note_title=payload.get("note_title", ""),
+                    content=payload.get("content", ""),
+                    score=point.score,
+                    heading_context=payload.get("heading_context"),
+                )
+            )
+
+        return items
 
     def is_healthy(self) -> bool:
         """Check if Qdrant is reachable."""

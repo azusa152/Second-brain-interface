@@ -606,10 +606,11 @@ class IndexService:
 class SearchService:
     def __init__(
         self,
-        qdrant_adapter: QdrantAdapter
+        embedder: EmbeddingService,
+        qdrant_adapter: QdrantAdapter,
     ):
         pass
-    
+
     def search(self, request: SearchRequest) -> SearchResponse:
         """Execute search with graph enrichment."""
         pass
