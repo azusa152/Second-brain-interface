@@ -1,0 +1,22 @@
+---
+description: Apply when handling secrets, API keys, environment variables, .env files, or security-sensitive configuration
+globs: ""
+alwaysApply: false
+---
+
+# Security Standards
+
+## Secrets Management
+- Never hardcode secrets, API keys, or tokens in source code.
+- Use `os.getenv()` with `python-dotenv` for all configuration. Reference `.env.example` for required variables.
+- Never commit `.env` files. Only commit `.env.example` with placeholder values.
+
+## Environment Variables
+- All sensitive configuration must be loaded from environment variables.
+- Document all required environment variables in `.env.example` with placeholder values.
+- Use descriptive names for environment variables (e.g., `OBSIDIAN_VAULT_PATH`, `EMBEDDING_MODEL_NAME`, `VECTOR_STORE_PATH`).
+
+## Local-First Privacy
+- The system processes all data locally. No note content should be sent to external APIs in the MVP.
+- Embedding models must run locally (no OpenAI API calls for embeddings unless the user explicitly opts in).
+- The Obsidian vault mount must be **read-only** — the middleware must never modify user notes.

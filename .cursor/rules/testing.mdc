@@ -1,0 +1,85 @@
+---
+description: Backend testing standards with pytest. Apply when writing or modifying tests in backend/tests/ or any test files.
+globs:
+  - "backend/tests/**"
+  - "**/*test*.py"
+  - "**/conftest.py"
+alwaysApply: false
+---
+
+# Backend Testing Standards (pytest)
+
+Every feature MUST ship with tests. No untested code in production.
+
+## Test File Structure
+
+Tests live in `backend/tests/` mirroring the source layout. Check the actual directory for current structure.
+
+## Test Naming
+
+Use descriptive names: `test_<function>_should_<expected_behavior>`
+
+```python
+# ✅ GOOD
+def test_search_should_return_top_k_results(): ...
+def test_indexer_should_skip_malformed_markdown(): ...
+def test_watcher_should_debounce_rapid_saves(): ...
+
+# ❌ BAD
+def test_search(): ...
+def test_1(): ...
+```
+
+## AAA Pattern
+
+Every test follows **Arrange / Act / Assert**:
+
+```python
+def test_search_should_return_related_backlinks():
+    # Arrange
+    index_service.index_note("vault/database-migration.md")
+    index_service.index_note("vault/architecture-review.md")  # links to migration note
+
+    # Act
+    results = search_service.search("database migration decision")
+
+    # Assert
+    assert len(results.results) >= 1
+    assert any("architecture-review" in r.title for r in results.related_notes)
+```
+
+## Fixtures & conftest.py
+
+- `conftest.py` provides: `TestClient`, test vault directory with sample `.md` files, mock vector store, mock embedding model.
+- Use `@pytest.fixture` with appropriate scope (`session` for embedding model, `function` for per-test isolation).
+
+## Mock External Services
+
+- **Embedding model**, **vector store**, and **file system watcher** MUST be mocked or use in-memory/test doubles. Never rely on real model inference or persistent storage in tests.
+- Use `unittest.mock.patch` or `pytest-mock` to replace infrastructure adapters.
+- Provide a small set of **test vault** Markdown files with known wikilinks for deterministic graph traversal tests.
+
+## Minimum Test Coverage Per Module
+
+### Module A: Indexing
+| Scenario | What to test |
+|----------|-------------|
+| Happy path | New `.md` file is parsed, chunked, embedded, and stored |
+| Malformed Markdown | Parser gracefully skips or warns, doesn't crash |
+| File delete event | Corresponding chunks are removed from index |
+| Debounce | Rapid saves trigger only one indexing pass |
+
+### Module B: Retrieval
+| Scenario | What to test |
+|----------|-------------|
+| Semantic search | Query returns relevant chunks above threshold |
+| Keyword search | Exact term match returns expected notes |
+| Hybrid merge | Results from both strategies are combined and deduplicated |
+| Graph traversal | Backlinks and outgoing links are included in results |
+| Low relevance filter | Results below similarity threshold are excluded |
+| Top-K limit | No more than K results returned |
+
+## Mandatory Coverage Rule
+
+- Every new feature or bug fix MUST include corresponding tests.
+- PRs that change business logic without adding or updating tests should be flagged during review.

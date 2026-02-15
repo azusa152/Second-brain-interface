@@ -1,0 +1,30 @@
+---
+description: Apply when working with Docker, Dockerfiles, docker-compose, docker-entrypoint.sh, or container configuration. Covers non-root execution, entrypoint patterns, and image pinning.
+globs:
+  - "**/Dockerfile"
+  - "**/docker-compose*.yml"
+  - "**/docker-entrypoint.sh"
+alwaysApply: false
+---
+
+# Docker Best Practices
+
+## Non-root Execution
+- **Non-root execution:** All containers run as a dedicated application user (e.g., `appuser`). Never run application processes as root.
+
+## Entrypoint Pattern
+- **Entrypoint pattern:** Services with persistent volumes (e.g., vector DB data, index files) MUST use a `docker-entrypoint.sh` script that:
+  1. Runs initially as root to fix volume ownership (`chown -R appuser:appuser /app/data`)
+  2. Drops privileges via `gosu appuser` before exec'ing the main process
+  3. Is idempotent (safe to run on every startup)
+
+## Privilege Dropping
+- **gosu for privilege drop:** Use `gosu` (not `su` or `sudo`) for dropping privileges in entrypoint scripts. Install via `apt-get install gosu`.
+
+## Image Security
+- **Image pinning:** Pin base images with SHA256 digest. Update periodically.
+- **No USER directive with volumes:** Do not use `USER` in Dockerfiles that mount persistent volumes. Use the entrypoint pattern instead.
+
+## Volume Mounts
+- **Obsidian vault:** The vault directory is mounted read-only into the backend container. The service must never write to the vault.
+- **Index data:** Vector store and keyword index data live in a dedicated named volume for persistence across container restarts.

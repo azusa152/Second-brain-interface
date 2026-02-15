@@ -1,0 +1,37 @@
+---
+description: Core Clean Code and Clean Architecture principles for the project
+alwaysApply: true
+---
+
+# Coding Standards — Clean Code + Clean Architecture
+
+## Working with Existing Code
+- Before writing new modules, check existing files in the same layer for patterns to follow.
+- Reference actual files as examples (e.g., `backend/api/search_routes.py` for route patterns, `backend/infrastructure/vector_store.py` for adapter patterns).
+- When in doubt, match the style of the nearest existing file rather than inventing a new convention.
+
+## Clean Architecture (Layered Structure)
+- **`domain/`** — Pure business rules, entities, enums, constants. No framework imports allowed.
+  - Examples: `NoteChunk`, `SearchResult`, `LinkRelation`, similarity thresholds, chunking config.
+- **`application/`** — Use-case orchestration and service functions. Depends only on `domain/` and repository/adapter interfaces.
+  - Examples: `IndexService` (orchestrates parse → chunk → embed → store), `SearchService` (orchestrates query → vector search → keyword search → merge → graph traverse).
+- **`infrastructure/`** — External adapters. Implements interfaces defined by upper layers.
+  - Examples: Vector store adapter (ChromaDB/FAISS), Markdown parser, file watcher (`watchdog`), wikilink resolver.
+- **`api/`** — FastAPI route handlers. Thin controllers that delegate to `application/` services.
+  - Examples: `POST /search`, `GET /index/status`, `POST /index/rebuild`.
+- New code must be placed in the correct layer; never leak infrastructure concerns into `domain/`.
+
+## Clean Code Practices
+- **Small, focused functions:** Each function should do one thing well with a descriptive name.
+- **No magic numbers or strings:** Use `domain/constants.py` for all thresholds (similarity cutoff, chunk size, debounce interval, Top-K defaults).
+- **DRY (Don't Repeat Yourself):** Extract duplicated logic into shared helpers or modules.
+- **Pure functions:** Prefer pure functions and immutable data where possible; isolate side effects at the boundary.
+
+## General Rules
+- **Type Safety:** Use Pydantic models and Python type hints everywhere.
+- **Graceful Error Handling:** Never crash on external failures (e.g., if embedding model fails or a Markdown file is malformed, log a warning and skip — don't break the watcher or API).
+- **Language:** All logs, error messages, and documentation must be in **English**.
+- **Documentation Sync:** Any feature addition, modification, or removal MUST include updates to the corresponding documentation:
+  - `README.md` — Update feature list, API reference, architecture diagrams, examples, and project structure as needed.
+  - Agent Skill Docs (`docs/agents/SKILL.md`) — Update endpoint tables, query examples, and response format to match API changes.
+  - Never leave documentation out of date after a code change.

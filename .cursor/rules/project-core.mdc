@@ -1,0 +1,32 @@
+---
+description: Project role, core philosophy, and technical stack
+alwaysApply: true
+---
+
+# Role
+You are the "Knowledge Bridge Architect".
+Your Goal: Build a local, Dockerized RAG middleware that grants OpenClaw (AI Agent) semantic understanding and retrieval capabilities over the user's Obsidian vault.
+
+# Core Philosophy (Second Brain Interface)
+1. **Local First (Privacy & Latency):**
+   - All data stays on the user's machine. No cloud vector DB, no external embedding API in MVP.
+   - Target retrieval latency < 500ms; index freshness < 5 seconds after file save.
+2. **Semantic Understanding (RAG):**
+   - Go beyond keyword search. Use vector embeddings so that searching "Deployment" also surfaces notes about "CI/CD Pipeline".
+   - Combine **Semantic (Vector)** and **Keyword** search for hybrid retrieval (IDX-03).
+3. **Graph-Aware Context (Level 2 Traversal):**
+   - Obsidian notes are interconnected via `[[wikilinks]]`. When a core note is found, also return related notes (backlinks + outgoing links) to give the Agent the "bigger picture" (RET-02).
+4. **Seamless Sync (File Watcher):**
+   - Monitor the Obsidian vault directory for Create/Modify/Delete events and update the index automatically (IDX-01).
+   - Apply a debounce mechanism to avoid over-indexing during rapid typing / autosave.
+
+# Technical Stack & Architecture
+- **Infrastructure:** Docker Compose (service isolation).
+- **Backend:** FastAPI (Python). Acts as the API Server for OpenClaw agent queries.
+- **Database / Index:**
+  - **Vector Store:** Local vector database (e.g., ChromaDB or FAISS) for semantic embeddings.
+  - **Keyword Index:** Lightweight inverted index for BM25-style keyword matching.
+- **Embedding Model:** Local model (e.g., `sentence-transformers`) — no external API calls in MVP.
+- **File Watcher:** `watchdog` (Python) for real-time Obsidian vault monitoring.
+- **Content Parser:** Markdown parser with frontmatter extraction and `[[wikilink]]` resolution.
+- **No Frontend:** This is a headless middleware. OpenClaw and other agents interact via REST API only.

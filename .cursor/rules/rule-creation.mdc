@@ -1,0 +1,147 @@
+---
+description: Apply when creating, modifying, or discussing Cursor rules (.mdc files). Documents conventions for writing consistent, well-organized rules.
+globs: ""
+alwaysApply: false
+---
+
+# Rule Creation Guidelines
+
+This meta-rule documents conventions for creating and maintaining Cursor rules in this project.
+
+## File Naming
+
+- Use **kebab-case** for all rule filenames (e.g., `coding-standards.mdc`, `python-tooling.mdc`)
+- No numbered prefixes needed unless the project grows beyond 10+ rule files
+- File extensions: Use `.mdc` for rules with YAML frontmatter
+
+## Frontmatter Structure
+
+Every rule file MUST include YAML frontmatter with these fields:
+
+```yaml
+---
+description: "Clear description of what the rule covers and when it applies"
+globs: ""  # or ["pattern1", "pattern2"]
+alwaysApply: false  # or true
+---
+```
+
+## Activation Modes
+
+Choose the appropriate activation mode:
+
+### 1. Always Apply (`alwaysApply: true`)
+**Use for:** Universal project standards that apply in every conversation.
+
+**Keep minimal:** Only 1-2 rules should use this mode to conserve token budget.
+
+**Example:** Core Clean Architecture principles, project role definition.
+
+### 2. Auto Attached (glob patterns)
+**Use for:** Language-specific, directory-specific, or file-type-specific rules.
+
+**Best practice:** Most rules should use this mode for precision and efficiency.
+
+**Example:**
+```yaml
+globs:
+  - "backend/**/*.py"
+  - "**/*test*.py"
+```
+
+### 3. Agent Requested (description-based)
+**Use for:** Situational rules where the AI can determine relevance from context.
+
+**Description format:** State WHEN to apply, not just WHAT the rule contains.
+
+**Good example:**
+```yaml
+description: "Apply when handling secrets, API keys, environment variables, or .env files"
+```
+
+**Bad example:**
+```yaml
+description: "Security stuff"
+```
+
+### 4. Manual (@-mention)
+**Use for:** Infrequently used rules, checklists, or on-demand workflows.
+
+**Activation:** User must explicitly reference with `@rule-name` in chat.
+
+## Content Guidelines
+
+### Length
+- Target: ~50-200 lines per rule file
+- Maximum: ~500 lines (split if longer)
+- Keep focused on ONE topic
+
+### Structure
+- Use clear markdown headings (`##` for sections)
+- Include concrete examples, not just principles
+- Reference actual file paths when relevant (e.g., `backend/api/search_routes.py`)
+- Use code blocks with language identifiers for examples
+
+### Language
+- All content (rules, logs, error messages, examples) must be in **English**.
+
+### Code Examples
+Always provide concrete examples with GOOD and BAD patterns:
+
+```python
+# ✅ GOOD
+def search_notes(query: str, top_k: int = 5) -> SearchResponse:
+    return search_service.hybrid_search(query, top_k)
+
+# ❌ BAD
+def search(q):
+    return do_search(q)
+```
+
+## Organization Principles
+
+### One Topic Per File
+Split large rules into focused files:
+
+- ❌ BAD: `coding-standards.mdc` (200 lines covering Python + Docker + Testing + Security)
+- ✅ GOOD: Separate files for `python-tooling.mdc`, `docker.mdc`, `testing.mdc`, `security.mdc`
+
+### Avoid Duplication
+- Don't copy entire style guides (use a linter instead)
+- Don't duplicate what's already in your codebase
+- Reference canonical examples rather than copying code
+
+### Version Control
+- Commit all rules to git
+- Update rules when patterns change
+- Use descriptive commit messages (e.g., "feat: Add Docker best practices rule")
+
+## File Location
+
+All project rules live in:
+```
+.cursor/rules/
+├── project-core.mdc
+├── coding-standards.mdc
+├── python-tooling.mdc
+├── testing.mdc
+├── docker.mdc
+├── security.mdc
+├── git-conventions.mdc
+├── ai-agent-friendly.mdc
+└── rule-creation.mdc
+```
+
+## When to Create a New Rule
+
+✅ Create a new rule when:
+- A new technology/framework is added to the stack
+- Repeated mistakes occur that a rule could prevent
+- A new architectural pattern is adopted
+- Team conventions evolve significantly
+
+❌ Don't create a rule for:
+- One-off edge cases
+- Overly obvious guidance
+- Framework features the AI already knows
+- Personal preferences that aren't team standards

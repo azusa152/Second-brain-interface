@@ -1,0 +1,126 @@
+---
+description: Apply when designing or implementing FastAPI backend APIs or agent-facing endpoints. Covers structured responses, OpenAPI completeness, error codes, and agent skill documentation sync.
+globs: ["backend/**"]
+---
+
+# AI Agent-Friendly System Design
+
+This system is **AI agent-driven**. The primary consumer is OpenClaw (or any LLM tool-use agent). Every API surface must be designed so that an AI agent can discover, call, and interpret endpoints **without human assistance**.
+
+---
+
+## 1. Structured, Machine-Parseable Responses
+
+- Every endpoint MUST return JSON with a typed Pydantic `response_model`.
+- Search responses use a standard envelope:
+
+```python
+# ✅ GOOD — typed response model with clear structure
+class SearchResponse(BaseModel):
+    query: str
+    results: list[SearchResultItem]
+    related_notes: list[RelatedNote]
+    total_hits: int
+
+@router.post("/search", response_model=SearchResponse, summary="Semantic search over Obsidian vault")
+def search_notes(req: SearchRequest): ...
+
+# ❌ BAD — untyped dict
+@router.post("/search")
+def search_notes(req: dict):
+    return {"results": [...]}
+```
+
+## 2. Descriptive Error Responses
+
+- All errors MUST return a JSON body with both `detail` (human-readable) and `error_code` (machine-readable slug).
+- Agents branch on `error_code`, not on substring matching `detail`.
+
+```python
+# ✅ GOOD
+raise HTTPException(status_code=503, detail={
+    "error_code": "INDEX_NOT_READY",
+    "detail": "Index is not ready yet. Please try again later."
+})
+
+# ❌ BAD — bare string detail
+raise HTTPException(status_code=503, detail="Index is not ready.")
+```
+
+## 3. Core API Endpoints
+
+The middleware exposes two module groups per the PRD:
+
+### Module A: Indexing
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `GET /index/status` | GET | Return current index health (doc count, last updated, watcher status) |
+| `POST /index/rebuild` | POST | Force a full re-index of the vault |
+
+### Module B: Retrieval
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `POST /search` | POST | Accept a natural language query, return Top-K results with relevance scores |
+| `GET /note/{note_id}/links` | GET | Return backlinks and outgoing links for a specific note |
+
+New endpoints follow this pattern: define the route in `api/`, delegate to `application/` services, never embed business logic in the handler.
+
+## 4. OpenAPI Completeness
+
+Every FastAPI route MUST have:
+1. A `summary` parameter in the decorator (shown in Swagger & OpenAPI JSON).
+2. A typed `response_model`.
+3. Pydantic request body schemas for POST/PUT/PATCH.
+
+This ensures `/openapi.json` is a complete, self-describing contract that any agent can consume.
+
+## 5. Idempotent & Safe Operations
+
+- GET endpoints MUST be safe (no side effects).
+- `POST /index/rebuild` SHOULD be idempotent (re-running produces the same index state).
+
+## 6. Search Result Quality
+
+- Apply a **similarity threshold** to filter out low-relevance noise (RET-03).
+- Default **Top-K** limit per query to avoid overloading the Agent's context window.
+- Include **relevance scores** in every result so the agent can make informed decisions.
+
+## 7. Graph Traversal in Results
+
+- When returning search results, include **Level 2 graph context**: for each primary hit, list titles/summaries of its backlinks and outgoing links (RET-02).
+- Preserve relationship descriptions (e.g., "linked from", "links to") in the response.
+
+## 8. Consistent Datetime Format
+
+- All timestamps in JSON responses MUST be ISO 8601 UTC strings (e.g., `"2025-12-01T08:30:00Z"`).
+
+## 9. Versioning Readiness
+
+- Search parameters (Top-K, threshold, hybrid weight) should be configurable via `domain/constants.py`.
+- Adding a new retrieval strategy = one adapter + one service method. No scattering across files.
+
+---
+
+# Agent Skill & Documentation Sync
+
+Every code change that affects the API surface MUST update the agent skill files so AI agents always have an accurate understanding of the system.
+
+## Files to Update
+
+| File | What to update |
+|------|----------------|
+| `docs/agents/SKILL.md` | Endpoint table, query examples, response format, usage tips |
+| `README.md` | API reference section, architecture diagram |
+
+## When to Update
+
+- **New endpoint added** — Add it to the endpoint table with method, path, description, and example.
+- **Endpoint removed or renamed** — Remove/update the old entry.
+- **Request/response schema changed** — Update example payloads and response format sections.
+- **Search behavior changed** (threshold, Top-K, hybrid weights) — Update documented defaults.
+
+## Rules
+
+- Skill files are the **primary interface** between AI agents and this system. Treat them as a first-class API contract, not an afterthought.
+- Keep descriptions concise and action-oriented — agents need to know **what to call** and **what to expect back**, not implementation details.
+- Always include a concrete JSON example for new endpoints.

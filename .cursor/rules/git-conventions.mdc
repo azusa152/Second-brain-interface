@@ -1,0 +1,38 @@
+---
+description: Apply when creating commits, naming branches, or working with git workflow. Covers commit message format (type-colon-description, imperative mood) and branch naming conventions (type/kebab-case).
+alwaysApply: false
+---
+
+# Git Conventions
+
+## Commit Messages
+-   **Tense & mood:** Present tense, imperative mood (`Add feature`, not `Added feature` or `Adding feature`).
+-   **Format:** `<type>: <short description>` (lowercase type, capitalize first word of description).
+-   **Types:** `feat`, `fix`, `refactor`, `docs`, `style`, `chore`, `test`, `perf`.
+-   **Subject line:** Keep under 72 characters.
+-   **Body (optional):** Separate from subject by a blank line; explain *why*, not *what*.
+-   **Scope:** One logical change per commit; keep commits focused and meaningful.
+-   **Examples:**
+    -   `feat: Add browser timezone detection for timestamps`
+    -   `fix: Resolve Safari blank page caused by XSRF policy`
+    -   `docs: Update README with market badge feature`
+    -   `refactor: Extract hex-to-rgb helper for pie chart colors`
+
+## Branch Naming
+-   **Format:** `<type>/<short-kebab-case-description>`
+-   **Types:** `feat/`, `fix/`, `refactor/`, `docs/`, `chore/` (mirror commit types).
+-   **Default branch:** `main`
+-   **Examples:**
+    -   `feat/xray-analysis`
+    -   `fix/safari-blank-page`
+    -   `docs/update-readme`
+    -   `refactor/clean-architecture`
+
+## Branch Workflow
+-   **Never commit new features or fixes directly to `main`.**
+-   Before making any code changes for a new feature, bug fix, or refactor:
+    1.  Ensure you are on `main` and it is up to date.
+    2.  Create a new branch following the naming convention above (`git checkout -b <type>/<description>`).
+    3.  Switch to the new branch **before** writing any code.
+    4.  All development work happens on the feature branch, not `main`.
+-   This applies to every task that modifies source code — even small fixes.
