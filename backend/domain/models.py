@@ -28,6 +28,9 @@ class NoteChunk(BaseModel):
     content: str
     chunk_index: int
     heading_context: str | None = None
+    note_title: str = ""
+    tags: list[str] = []
+    last_modified: datetime | None = None
     embedding: list[float] | None = None
 
 
@@ -81,6 +84,18 @@ class SearchResponse(BaseModel):
     related_notes: list[RelatedNote]
     total_hits: int
     search_time_ms: float
+
+
+# --- Index Rebuild ---
+
+
+class IndexRebuildResponse(BaseModel):
+    """Response from POST /index/rebuild."""
+
+    status: str
+    notes_indexed: int
+    chunks_created: int
+    time_taken_seconds: float
 
 
 # --- Health ---

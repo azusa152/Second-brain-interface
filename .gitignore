@@ -16,6 +16,7 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
+tests/fixtures/perf_vault/
 
 # Linting
 .ruff_cache/
