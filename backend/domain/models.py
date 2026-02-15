@@ -90,6 +90,24 @@ class SearchResponse(BaseModel):
     search_time_ms: float
 
 
+# --- Note Links ---
+
+
+class NoteLinkItem(BaseModel):
+    """A single link relationship for a note."""
+
+    note_path: str
+    note_title: str
+
+
+class NoteLinksResponse(BaseModel):
+    """Response from GET /note/{path}/links."""
+
+    note_path: str
+    outlinks: list[NoteLinkItem]
+    backlinks: list[NoteLinkItem]
+
+
 # --- Index Rebuild ---
 
 

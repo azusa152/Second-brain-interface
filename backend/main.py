@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from backend.api.dependencies import initialize_services
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
+from backend.api.note_routes import router as note_router
 from backend.api.search_routes import router as search_router
 from backend.logging_config import get_logger, setup_logging
 
@@ -32,3 +33,4 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(index_router)
 app.include_router(search_router)
+app.include_router(note_router)

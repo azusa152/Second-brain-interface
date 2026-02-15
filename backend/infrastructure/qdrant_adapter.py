@@ -7,6 +7,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    MatchAny,
     MatchValue,
     PointStruct,
     VectorParams,
@@ -176,6 +177,25 @@ class QdrantAdapter:
         except Exception:
             return 0
 
+    def is_note_indexed(self, note_path: str) -> bool:
+        """Check if a note has any chunks in the index."""
+        result = self.client.scroll(
+            collection_name=QDRANT_COLLECTION_NAME,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="note_path",
+                        match=MatchValue(value=note_path),
+                    )
+                ]
+            ),
+            limit=1,
+            with_payload=False,
+            with_vectors=False,
+        )
+        points, _ = result
+        return len(points) > 0
+
     def get_indexed_note_paths(self) -> set[str]:
         """Return all unique note_paths in the chunks collection."""
         note_paths: set[str] = set()
@@ -233,6 +253,84 @@ class QdrantAdapter:
             )
 
         return items
+
+    def get_related_notes_batch(
+        self, note_paths: set[str]
+    ) -> dict[str, list[dict[str, str]]]:
+        """Batch-fetch outgoing links and backlinks for a set of note paths.
+
+        Returns a dict keyed by note_path, each value is a list of dicts with
+        keys: related_path, relationship ("outgoing" or "backlink").
+        Uses two scroll queries (outgoing + backlinks) to avoid N+1.
+        """
+        if not note_paths:
+            return {}
+
+        path_list = list(note_paths)
+        relations: dict[str, list[dict[str, str]]] = {p: [] for p in note_paths}
+
+        # 1. Outgoing links: source_path in note_paths
+        self._scroll_links(
+            field="source_path",
+            values=path_list,
+            relations=relations,
+            key_field="source_path",
+            related_field="resolved_target_path",
+            relationship="outgoing",
+        )
+
+        # 2. Backlinks: resolved_target_path in note_paths
+        self._scroll_links(
+            field="resolved_target_path",
+            values=path_list,
+            relations=relations,
+            key_field="resolved_target_path",
+            related_field="source_path",
+            relationship="backlink",
+        )
+
+        return relations
+
+    def _scroll_links(
+        self,
+        field: str,
+        values: list[str],
+        relations: dict[str, list[dict[str, str]]],
+        key_field: str,
+        related_field: str,
+        relationship: str,
+    ) -> None:
+        """Scroll the links collection with a MatchAny filter and populate relations."""
+        offset = None
+        while True:
+            result = self.client.scroll(
+                collection_name=QDRANT_LINK_COLLECTION_NAME,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key=field,
+                            match=MatchAny(any=values),
+                        )
+                    ]
+                ),
+                limit=100,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            points, next_offset = result
+            for point in points:
+                payload = point.payload or {}
+                key = payload.get(key_field, "")
+                related = payload.get(related_field)
+                if key in relations and related:
+                    relations[key].append(
+                        {"related_path": related, "relationship": relationship}
+                    )
+
+            if next_offset is None:
+                break
+            offset = next_offset
 
     def is_healthy(self) -> bool:
         """Check if Qdrant is reachable."""

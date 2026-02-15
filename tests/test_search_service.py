@@ -14,6 +14,7 @@ def _make_search_service() -> tuple[SearchService, MagicMock, MagicMock]:
 
     mock_qdrant = MagicMock()
     mock_qdrant.vector_search.return_value = []
+    mock_qdrant.get_related_notes_batch.return_value = {}
 
     service = SearchService(
         embedder=mock_embedder,
@@ -111,7 +112,7 @@ class TestSearchParameters:
 
 
 class TestSearchResponseFormat:
-    def test_search_response_should_have_related_notes_empty_for_phase3(self) -> None:
+    def test_search_response_should_have_empty_related_when_no_links(self) -> None:
         service, _, mock_qdrant = _make_search_service()
         mock_qdrant.vector_search.return_value = _make_result_items(2)
         request = SearchRequest(query="test")
