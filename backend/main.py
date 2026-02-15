@@ -1,7 +1,9 @@
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from backend.api.dependencies import get_index_service, initialize_services
 from backend.api.health_routes import router as health_router
@@ -40,3 +42,8 @@ app.include_router(health_router)
 app.include_router(index_router)
 app.include_router(search_router)
 app.include_router(note_router)
+
+# Mount dashboard static files AFTER API routers (StaticFiles is a catch-all)
+_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
+if os.path.isdir(_frontend_dir):
+    app.mount("/dashboard", StaticFiles(directory=_frontend_dir, html=True))

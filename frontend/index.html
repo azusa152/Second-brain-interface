@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Second Brain Interface — Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Second Brain Interface</h1>
+    <span id="header-status" class="badge badge-unknown">connecting...</span>
+  </header>
+
+  <main>
+    <!-- Health Panel -->
+    <section class="panel" id="panel-health">
+      <h2>Health</h2>
+      <ul class="status-list">
+        <li>Backend <span id="health-backend" class="badge badge-unknown">--</span></li>
+        <li>Qdrant <span id="health-qdrant" class="badge badge-unknown">--</span></li>
+        <li>Watcher <span id="health-watcher" class="badge badge-unknown">--</span></li>
+      </ul>
+    </section>
+
+    <!-- Index Status Panel -->
+    <section class="panel" id="panel-index-status">
+      <h2>Index Status</h2>
+      <dl class="kv-list">
+        <dt>Notes</dt>
+        <dd id="stat-notes">--</dd>
+        <dt>Chunks</dt>
+        <dd id="stat-chunks">--</dd>
+        <dt>Last Indexed</dt>
+        <dd id="stat-last-indexed">--</dd>
+      </dl>
+    </section>
+
+    <!-- Recent Events Panel -->
+    <section class="panel" id="panel-events">
+      <h2>Recent Events</h2>
+      <div class="scrollable">
+        <ul id="events-list" class="event-list">
+          <li class="placeholder">No events yet</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Search Playground Panel -->
+    <section class="panel" id="panel-search">
+      <h2>Search Playground</h2>
+      <form id="search-form" class="search-controls">
+        <input type="text" id="search-input" placeholder="Search your vault..." autocomplete="off">
+        <div class="topk-group">
+          <label for="search-top-k">Top K</label>
+          <input type="range" id="search-top-k" min="1" max="20" value="5">
+          <span id="search-top-k-value">5</span>
+        </div>
+        <button type="submit">Search</button>
+      </form>
+      <div class="scrollable">
+        <ul id="search-results" class="result-list">
+          <li class="placeholder">Enter a query above</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Vault Browser Panel -->
+    <section class="panel" id="panel-vault">
+      <h2>Vault Browser</h2>
+      <input type="text" id="vault-filter" placeholder="Filter notes...">
+      <div class="scrollable">
+        <ul id="vault-notes" class="note-list">
+          <li class="placeholder">Loading notes...</li>
+        </ul>
+      </div>
+      <div id="vault-links" class="links-detail" hidden>
+        <h3 id="links-title">Links</h3>
+        <div class="links-columns">
+          <div>
+            <h4>Outlinks</h4>
+            <ul id="links-outlinks"></ul>
+          </div>
+          <div>
+            <h4>Backlinks</h4>
+            <ul id="links-backlinks"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Actions Panel -->
+    <section class="panel" id="panel-actions">
+      <h2>Quick Actions</h2>
+      <button id="rebuild-btn" class="action-btn">Rebuild Index</button>
+      <div id="rebuild-result" class="action-result" hidden></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
