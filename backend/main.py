@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from backend.api.dependencies import initialize_services
+from backend.api.dependencies import get_index_service, initialize_services
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
 from backend.api.note_routes import router as note_router
@@ -16,11 +16,17 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
-    """Initialize services on startup."""
+    """Initialize services on startup, start file watcher, stop on shutdown."""
     logger.info("Starting up: initializing services")
     initialize_services()
+
+    index_service = get_index_service()
+    index_service.start_watcher()
+
     yield
+
     logger.info("Shutting down")
+    index_service.stop_watcher()
 
 
 app = FastAPI(

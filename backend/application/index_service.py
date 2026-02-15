@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from backend.domain.constants import WATCH_EXTENSIONS
 from backend.domain.models import IndexRebuildResponse, IndexStatus
 from backend.infrastructure.chunker import Chunker
+from backend.infrastructure.debouncer import Debouncer
 from backend.infrastructure.embedding import EmbeddingService
+from backend.infrastructure.file_watcher import FileWatcher
 from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
 from backend.infrastructure.vault_file_map import VaultFileMap
@@ -34,11 +36,51 @@ class IndexService:
         self._file_map = vault_file_map
         self._last_indexed: datetime | None = None
         self._rebuilding = False
+        self._watcher: FileWatcher | None = None
+        self._debouncer: Debouncer | None = None
 
     def initialize(self) -> None:
         """Scan the vault file map and ensure Qdrant collections exist."""
         self._file_map.scan()
         self._qdrant.ensure_collections()
+
+    def start_watcher(self) -> None:
+        """Create and start the file watcher with debounced callbacks."""
+        if self._watcher is not None and self._watcher.is_running:
+            return
+
+        self._debouncer = Debouncer(callback=self._on_file_changed)
+
+        self._watcher = FileWatcher(
+            vault_path=self._vault_path,
+            on_changed=self._debouncer.trigger,  # Debounced: coalesce rapid saves
+            on_deleted=self._on_file_deleted,     # Immediate: deletes are one-shot
+            on_moved=self._on_file_moved,         # Immediate: renames are one-shot
+        )
+        self._watcher.start()
+        logger.info("Watcher started for vault: %s", self._vault_path)
+
+    def stop_watcher(self) -> None:
+        """Stop the file watcher and cancel pending debounce timers."""
+        if self._debouncer is not None:
+            self._debouncer.cancel_all()
+        if self._watcher is not None:
+            self._watcher.stop()
+        logger.info("Watcher stopped")
+
+    def _on_file_changed(self, note_path: str) -> None:
+        """Handle a debounced file create/modify event."""
+        self._file_map.update_file(None, note_path)
+        self.index_single_note(note_path)
+        logger.info("Watcher re-indexed: %s", note_path)
+
+    def _on_file_deleted(self, note_path: str) -> None:
+        """Handle a file delete event (immediate, not debounced)."""
+        self.delete_note(note_path)
+
+    def _on_file_moved(self, old_path: str, new_path: str) -> None:
+        """Handle a file move/rename event (immediate, not debounced)."""
+        self.rename_note(old_path, new_path)
 
     def rebuild_index(self) -> IndexRebuildResponse | None:
         """Full re-index of all .md files in vault. Returns None if already running."""
@@ -120,7 +162,7 @@ class IndexService:
             indexed_notes=len(note_paths),
             indexed_chunks=chunks_count,
             last_indexed=self._last_indexed,
-            watcher_running=False,  # Phase 5 will update this
+            watcher_running=self._watcher is not None and self._watcher.is_running,
             qdrant_healthy=self._qdrant.is_healthy(),
         )
 
