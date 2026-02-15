@@ -1,0 +1,16 @@
+.git
+.gitignore
+.cursor
+docs
+tests
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.env
+*.md
+!backend/**/*.md
+LICENSE
+Makefile
+docker-compose.yml
