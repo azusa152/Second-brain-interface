@@ -25,9 +25,7 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def _make_search_response(
-    query: str = "test", num_results: int = 2
-) -> SearchResponse:
+def _make_search_response(query: str = "test", num_results: int = 2) -> SearchResponse:
     """Build a SearchResponse for mocking."""
     results = [
         SearchResultItem(
@@ -67,9 +65,7 @@ class TestSearchEndpoint:
     def test_search_should_return_200_with_empty_results(
         self, client: TestClient, mock_search_service: MagicMock
     ) -> None:
-        mock_search_service.search.return_value = _make_search_response(
-            "no match", 0
-        )
+        mock_search_service.search.return_value = _make_search_response("no match", 0)
 
         resp = client.post("/search", json={"query": "no match"})
 

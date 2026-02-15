@@ -7,9 +7,16 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    Fusion,
+    FusionQuery,
     MatchAny,
     MatchValue,
+    NamedSparseVector,
+    NamedVector,
     PointStruct,
+    Prefetch,
+    SparseVector as QdrantSparseVector,
+    SparseVectorParams,
     VectorParams,
 )
 
@@ -20,6 +27,7 @@ from backend.domain.constants import (
     SIMILARITY_THRESHOLD,
 )
 from backend.domain.models import NoteChunk, SearchResultItem, WikiLink
+from backend.infrastructure.embedding import SparseVector
 from backend.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -40,9 +48,21 @@ class QdrantAdapter:
         self._ensure_links_collection()
 
     def _ensure_chunks_collection(self) -> None:
-        """Create the obsidian_chunks collection."""
+        """Create the obsidian_chunks collection with dense + sparse vectors.
+
+        If the collection exists but lacks sparse vector config (pre-Phase 6),
+        it is deleted and recreated. A full rebuild is required afterward.
+        """
         if self._collection_exists(QDRANT_COLLECTION_NAME):
-            return
+            if not self._has_sparse_vectors(QDRANT_COLLECTION_NAME):
+                logger.warning(
+                    "Collection %s lacks sparse vector config — recreating. "
+                    "A full rebuild (POST /index/rebuild) is required.",
+                    QDRANT_COLLECTION_NAME,
+                )
+                self.client.delete_collection(QDRANT_COLLECTION_NAME)
+            else:
+                return
 
         self.client.create_collection(
             collection_name=QDRANT_COLLECTION_NAME,
@@ -51,6 +71,9 @@ class QdrantAdapter:
                     size=EMBEDDING_DIM,
                     distance=Distance.COSINE,
                 )
+            },
+            sparse_vectors_config={
+                "sparse": SparseVectorParams(),
             },
         )
         logger.info("Created collection: %s", QDRANT_COLLECTION_NAME)
@@ -74,22 +97,44 @@ class QdrantAdapter:
         except UnexpectedResponse:
             return False
 
-    def bulk_upsert_chunks(self, chunks: list[NoteChunk]) -> None:
-        """Insert or update chunks in bulk."""
+    def _has_sparse_vectors(self, name: str) -> bool:
+        """Check if a collection has sparse vector config."""
+        try:
+            info = self.client.get_collection(name)
+            sparse_config = info.config.params.sparse_vectors
+            return sparse_config is not None and len(sparse_config) > 0
+        except Exception:
+            return False
+
+    def bulk_upsert_chunks(
+        self,
+        chunks: list[NoteChunk],
+        sparse_vectors: list[SparseVector] | None = None,
+    ) -> None:
+        """Insert or update chunks in bulk with dense and optional sparse vectors."""
         if not chunks:
             return
 
         points = []
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             if chunk.embedding is None:
                 logger.warning("Skipping chunk without embedding: %s", chunk.chunk_id)
                 continue
 
             point_id = self._deterministic_id(chunk.chunk_id)
+            vectors: dict = {"dense": chunk.embedding}
+
+            if sparse_vectors is not None and i < len(sparse_vectors):
+                sv = sparse_vectors[i]
+                vectors["sparse"] = QdrantSparseVector(
+                    indices=sv.indices,
+                    values=sv.values,
+                )
+
             points.append(
                 PointStruct(
                     id=point_id,
-                    vector={"dense": chunk.embedding},
+                    vector=vectors,
                     payload={
                         "chunk_id": chunk.chunk_id,
                         "note_path": chunk.note_path,
@@ -220,26 +265,47 @@ class QdrantAdapter:
 
         return note_paths
 
-    def vector_search(
+    def hybrid_search(
         self,
         query_vector: list[float],
+        sparse_vector: SparseVector,
         top_k: int,
         threshold: float = SIMILARITY_THRESHOLD,
     ) -> list[SearchResultItem]:
-        """Dense vector search against the chunks collection.
+        """Hybrid search combining dense + sparse vectors via RRF fusion.
 
-        Returns results sorted by score descending, filtered by threshold.
+        Uses Qdrant's Prefetch + Fusion query API to run both dense and sparse
+        searches in a single request, then merges results using Reciprocal Rank
+        Fusion (RRF).
         """
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=QDRANT_COLLECTION_NAME,
-            query_vector=("dense", query_vector),
+            prefetch=[
+                Prefetch(
+                    query=NamedVector(name="dense", vector=query_vector),
+                    using="dense",
+                    limit=top_k * 2,
+                    score_threshold=threshold,
+                ),
+                Prefetch(
+                    query=NamedSparseVector(
+                        name="sparse",
+                        vector=QdrantSparseVector(
+                            indices=sparse_vector.indices,
+                            values=sparse_vector.values,
+                        ),
+                    ),
+                    using="sparse",
+                    limit=top_k * 2,
+                ),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
             limit=top_k,
-            score_threshold=threshold,
             with_payload=True,
         )
 
         items: list[SearchResultItem] = []
-        for point in results:
+        for point in results.points:
             payload = point.payload or {}
             items.append(
                 SearchResultItem(
@@ -247,7 +313,7 @@ class QdrantAdapter:
                     note_path=payload.get("note_path", ""),
                     note_title=payload.get("note_title", ""),
                     content=payload.get("content", ""),
-                    score=point.score,
+                    score=point.score if point.score is not None else 0.0,
                     heading_context=payload.get("heading_context"),
                 )
             )

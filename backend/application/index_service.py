@@ -54,8 +54,8 @@ class IndexService:
         self._watcher = FileWatcher(
             vault_path=self._vault_path,
             on_changed=self._debouncer.trigger,  # Debounced: coalesce rapid saves
-            on_deleted=self._on_file_deleted,     # Immediate: deletes are one-shot
-            on_moved=self._on_file_moved,         # Immediate: renames are one-shot
+            on_deleted=self._on_file_deleted,  # Immediate: deletes are one-shot
+            on_moved=self._on_file_moved,  # Immediate: renames are one-shot
         )
         self._watcher.start()
         logger.info("Watcher started for vault: %s", self._vault_path)
@@ -203,11 +203,12 @@ class IndexService:
 
         texts = [c.content for c in chunks]
         embeddings = self._embedder.embed_batch(texts)
+        sparse_vectors = self._embedder.embed_batch_sparse(texts)
 
         for chunk, embedding in zip(chunks, embeddings):
             chunk.embedding = embedding
 
-        self._qdrant.bulk_upsert_chunks(chunks)
+        self._qdrant.bulk_upsert_chunks(chunks, sparse_vectors=sparse_vectors)
         self._qdrant.bulk_upsert_links(links)
 
         return len(chunks)

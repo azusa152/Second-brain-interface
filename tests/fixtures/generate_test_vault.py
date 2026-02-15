@@ -113,7 +113,9 @@ def generate_vault(output_dir: str, num_notes: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a synthetic test vault")
     parser.add_argument("--notes", type=int, default=100, help="Number of notes")
-    parser.add_argument("--output", type=str, default="/tmp/perf_vault", help="Output dir")
+    parser.add_argument(
+        "--output", type=str, default="/tmp/perf_vault", help="Output dir"
+    )
     args = parser.parse_args()
     generate_vault(args.output, args.notes)
 

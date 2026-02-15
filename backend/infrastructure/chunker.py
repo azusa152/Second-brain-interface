@@ -95,9 +95,7 @@ class Chunker:
         """Build 'H1 > H2 > H3' context string from level-indexed dict."""
         if not heading_by_level:
             return None
-        return " > ".join(
-            heading_by_level[lvl] for lvl in sorted(heading_by_level)
-        )
+        return " > ".join(heading_by_level[lvl] for lvl in sorted(heading_by_level))
 
     def _split_fixed_size(self, text: str) -> list[str]:
         """Split long text into fixed-size chunks with overlap."""

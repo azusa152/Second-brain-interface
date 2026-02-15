@@ -7,13 +7,22 @@ services:
       - "8000:8000"
     environment:
       - QDRANT_URL=http://qdrant:6333
+      - OBSIDIAN_VAULT_PATH=/vault
+    volumes:
+      - ${OBSIDIAN_VAULT_PATH:-./_vault}:/vault:ro
     depends_on:
       qdrant:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   qdrant:
-    image: qdrant/qdrant:v1.7.4
+    image: qdrant/qdrant:v1.13.2
     ports:
       - "6333:6333"
       - "6334:6334"

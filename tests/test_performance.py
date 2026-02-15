@@ -35,8 +35,9 @@ def _make_perf_service(vault_path: str) -> tuple[IndexService, MagicMock]:
     chunker = Chunker()
 
     mock_embedder = MagicMock()
-    mock_embedder.embed_batch.side_effect = lambda texts: [
-        [0.0] * 384 for _ in texts
+    mock_embedder.embed_batch.side_effect = lambda texts: [[0.0] * 384 for _ in texts]
+    mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
+        MagicMock(indices=[1], values=[0.5]) for _ in texts
     ]
 
     mock_qdrant = MagicMock()

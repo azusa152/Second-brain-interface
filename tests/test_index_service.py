@@ -18,6 +18,7 @@ def _make_service(
     chunker = Chunker()
     mock_embedder = MagicMock()
     mock_embedder.embed_batch.return_value = []
+    mock_embedder.embed_batch_sparse.return_value = []
     mock_qdrant = MagicMock()
     mock_qdrant.is_healthy.return_value = True
     mock_qdrant.get_chunks_count.return_value = 0
@@ -43,6 +44,9 @@ class TestRebuildIndex:
         mock_embedder.embed_batch.side_effect = lambda texts: [
             [0.0] * 384 for _ in texts
         ]
+        mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
+            MagicMock(indices=[1], values=[0.5]) for _ in texts
+        ]
 
         result = service.rebuild_index()
 
@@ -57,6 +61,9 @@ class TestRebuildIndex:
         mock_embedder.embed_batch.side_effect = lambda texts: [
             [0.0] * 384 for _ in texts
         ]
+        mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
+            MagicMock(indices=[1], values=[0.5]) for _ in texts
+        ]
 
         # Simulate concurrent rebuild
         service._rebuilding = True
@@ -69,6 +76,9 @@ class TestIndexSingleNote:
     def test_index_single_note_should_delete_old_and_insert_new(self) -> None:
         service, mock_qdrant, mock_embedder = _make_service()
         mock_embedder.embed_batch.return_value = [[0.0] * 384]
+        mock_embedder.embed_batch_sparse.return_value = [
+            MagicMock(indices=[1], values=[0.5])
+        ]
 
         service.index_single_note("note1.md")
 
@@ -98,6 +108,9 @@ class TestRenameNote:
     def test_rename_should_delete_old_and_index_new(self) -> None:
         service, mock_qdrant, mock_embedder = _make_service()
         mock_embedder.embed_batch.return_value = [[0.0] * 384]
+        mock_embedder.embed_batch_sparse.return_value = [
+            MagicMock(indices=[1], values=[0.5])
+        ]
 
         service.rename_note("note1.md", "renamed.md")
 

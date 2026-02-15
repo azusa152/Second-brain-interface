@@ -186,8 +186,8 @@ class TestGetRelatedNotesBatch:
         # Backlinks: empty
         adapter.client.scroll.side_effect = [
             ([point1], "next-page-id"),  # outgoing page 1
-            ([point2], None),            # outgoing page 2
-            ([], None),                  # backlinks (empty)
+            ([point2], None),  # outgoing page 2
+            ([], None),  # backlinks (empty)
         ]
 
         result = adapter.get_related_notes_batch({"a.md"})

@@ -55,6 +55,84 @@ Run `make help` to see all available targets.
 | `GET` | `/index/status` | Index health and statistics |
 | `GET` | `/note/{path}/links` | Backlinks and outlinks for a note |
 
+### Search your vault
+
+```bash
+curl -X POST http://localhost:8000/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "database migration decision", "top_k": 5}'
+```
+
+Response:
+```json
+{
+  "query": "database migration decision",
+  "results": [
+    {
+      "chunk_id": "notes/adr-005.md::0",
+      "note_path": "notes/adr-005.md",
+      "note_title": "ADR-005: Database Migration Strategy",
+      "content": "We decided to use Flyway for database migrations because...",
+      "score": 0.87,
+      "heading_context": "Decision",
+      "highlights": []
+    }
+  ],
+  "related_notes": [],
+  "total_hits": 1,
+  "search_time_ms": 45.2
+}
+```
+
+### Trigger full re-index
+
+```bash
+curl -X POST http://localhost:8000/index/rebuild
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "notes_indexed": 142,
+  "chunks_created": 1087,
+  "time_taken_seconds": 12.3
+}
+```
+
+### Check index status
+
+```bash
+curl http://localhost:8000/index/status
+```
+
+### Get note links
+
+```bash
+curl http://localhost:8000/note/notes/adr-005.md/links
+```
+
+For full agent integration documentation, see [docs/agents/SKILL.md](docs/agents/SKILL.md).
+
+## Upgrading
+
+If upgrading from a version before hybrid search (Phases 2-5), the existing Qdrant
+collection lacks sparse vector configuration. On startup, the service will detect
+this and automatically recreate the collection. **You must then trigger a full
+re-index** to populate both dense and sparse vectors:
+
+```bash
+curl -X POST http://localhost:8000/index/rebuild
+```
+
+Alternatively, delete the Qdrant data volume and restart:
+
+```bash
+docker compose down -v
+docker compose up -d
+curl -X POST http://localhost:8000/index/rebuild
+```
+
 ## Architecture
 
 ```

@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 class SearchService:
-    """Orchestrate semantic search: embed query → vector search → rank."""
+    """Orchestrate hybrid search: embed query → dense + sparse search → RRF fusion → rank."""
 
     def __init__(
         self,
@@ -27,19 +27,21 @@ class SearchService:
         self._qdrant = qdrant_adapter
 
     def search(self, request: SearchRequest) -> SearchResponse:
-        """Execute a semantic search over indexed chunks."""
+        """Execute a hybrid search (dense + sparse) over indexed chunks."""
         start = time.time()
 
         threshold = (
             request.threshold if request.threshold is not None else SIMILARITY_THRESHOLD
         )
 
-        # 1. Embed the query
+        # 1. Embed the query (dense + sparse)
         query_vector = self._embedder.embed_text(request.query)
+        sparse_vector = self._embedder.embed_text_sparse(request.query)
 
-        # 2. Vector search with threshold filtering (Qdrant handles score_threshold)
-        results = self._qdrant.vector_search(
+        # 2. Hybrid search via RRF fusion of dense and sparse results
+        results = self._qdrant.hybrid_search(
             query_vector=query_vector,
+            sparse_vector=sparse_vector,
             top_k=request.top_k,
             threshold=threshold,
         )
@@ -63,13 +65,13 @@ class SearchService:
             query=request.query,
             results=results,
             related_notes=related_notes,
-            # Post-filtering count; true pre-limit count deferred to Phase 6 (hybrid search)
             total_hits=len(results),
             search_time_ms=round(elapsed_ms, 1),
         )
 
     def _enrich_with_related_notes(
-        self, results: list[SearchResultItem],
+        self,
+        results: list[SearchResultItem],
     ) -> list[RelatedNote]:
         """Fetch outgoing links and backlinks for all result note paths (batch)."""
         result_paths = {r.note_path for r in results}

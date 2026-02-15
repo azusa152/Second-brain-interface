@@ -86,7 +86,6 @@ class SearchResponse(BaseModel):
         description="Number of results returned after top-k and threshold filtering. "
         "Does not represent the total number of matches in the index."
     )
-    # TODO: Phase 6 — implement true total_hits via count query when hybrid search is added.
     search_time_ms: float
 
 

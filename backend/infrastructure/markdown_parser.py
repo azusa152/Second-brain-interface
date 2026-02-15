@@ -73,9 +73,7 @@ class MarkdownParser:
             logger.warning("Failed to parse frontmatter in note")
             return {}, body
 
-    def _extract_title(
-        self, file_path: str, frontmatter: dict, body: str
-    ) -> str:
+    def _extract_title(self, file_path: str, frontmatter: dict, body: str) -> str:
         """Extract title from frontmatter, first H1, or filename."""
         if "title" in frontmatter:
             return str(frontmatter["title"])
@@ -106,9 +104,7 @@ class MarkdownParser:
 
         return sorted(tags)
 
-    def _extract_wikilinks(
-        self, source_path: str, body: str
-    ) -> list[WikiLink]:
+    def _extract_wikilinks(self, source_path: str, body: str) -> list[WikiLink]:
         """Extract and resolve [[wikilinks]] from body text."""
         # Skip code blocks
         clean = _CODE_BLOCK_RE.sub("", body)
