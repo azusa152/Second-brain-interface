@@ -140,3 +140,39 @@ class IndexStatus(BaseModel):
     last_indexed: datetime | None = None
     watcher_running: bool
     qdrant_healthy: bool
+
+
+# --- Watcher Events ---
+
+
+class WatcherEventItem(BaseModel):
+    """A single watcher event for API responses."""
+
+    event_type: str
+    file_path: str
+    timestamp: datetime
+    dest_path: str | None = None
+
+
+class WatcherEventsResponse(BaseModel):
+    """Response from GET /index/events."""
+
+    events: list[WatcherEventItem]
+    total: int
+
+
+# --- Indexed Notes ---
+
+
+class IndexedNoteItem(BaseModel):
+    """A single indexed note for API responses."""
+
+    note_path: str
+    note_title: str
+
+
+class IndexedNotesResponse(BaseModel):
+    """Response from GET /index/notes."""
+
+    notes: list[IndexedNoteItem]
+    total: int

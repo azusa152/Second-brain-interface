@@ -4,6 +4,7 @@ from backend.application.index_service import IndexService
 from backend.application.search_service import SearchService
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.embedding import EmbeddingService
+from backend.infrastructure.event_log import EventLog
 from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
 from backend.infrastructure.vault_file_map import VaultFileMap
@@ -17,6 +18,7 @@ _search_service: SearchService | None = None
 # Shared infrastructure singletons (created once, shared across services)
 _embedder: EmbeddingService | None = None
 _qdrant: QdrantAdapter | None = None
+_event_log: EventLog | None = None
 
 
 def initialize_services() -> None:
@@ -27,7 +29,7 @@ def initialize_services() -> None:
 
 def get_index_service() -> IndexService:
     """Return the singleton IndexService, creating it on first call."""
-    global _index_service, _embedder, _qdrant  # noqa: PLW0603
+    global _index_service, _embedder, _qdrant, _event_log  # noqa: PLW0603
     if _index_service is None:
         vault_path = os.getenv("OBSIDIAN_VAULT_PATH", "/vault")
         logger.info("Initializing IndexService with vault: %s", vault_path)
@@ -37,6 +39,7 @@ def get_index_service() -> IndexService:
         chunker = Chunker()
         _embedder = _embedder or EmbeddingService()
         _qdrant = _qdrant or QdrantAdapter()
+        _event_log = _event_log or EventLog()
 
         _index_service = IndexService(
             vault_path=vault_path,
@@ -45,6 +48,7 @@ def get_index_service() -> IndexService:
             embedder=_embedder,
             qdrant_adapter=_qdrant,
             vault_file_map=vault_file_map,
+            event_log=_event_log,
         )
         _index_service.initialize()
 

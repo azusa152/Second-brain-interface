@@ -56,6 +56,11 @@ class VaultFileMap:
         new_stem = os.path.splitext(os.path.basename(new_path))[0].lower()
         self._map[new_stem] = new_path
 
+    def has_file(self, path: str) -> bool:
+        """Check whether a file (by relative path basename) is tracked."""
+        stem = os.path.splitext(os.path.basename(path))[0].lower()
+        return stem in self._map
+
     def remove_file(self, path: str) -> None:
         """Remove a file from the map."""
         stem = os.path.splitext(os.path.basename(path))[0].lower()

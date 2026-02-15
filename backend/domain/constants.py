@@ -11,6 +11,9 @@ MAX_TOP_K = 20  # Maximum allowed top_k
 DEBOUNCE_SECONDS = 2.0  # Wait time before triggering index after file change
 WATCH_EXTENSIONS = [".md"]  # File types to monitor
 
+# Event Log
+EVENT_LOG_MAXLEN = 100  # Max events kept in ring buffer
+
 # Qdrant
 QDRANT_COLLECTION_NAME = "obsidian_chunks"
 QDRANT_LINK_COLLECTION_NAME = "obsidian_links"

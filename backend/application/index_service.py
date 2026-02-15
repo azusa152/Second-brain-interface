@@ -7,6 +7,7 @@ from backend.domain.models import IndexRebuildResponse, IndexStatus
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.debouncer import Debouncer
 from backend.infrastructure.embedding import EmbeddingService
+from backend.infrastructure.event_log import EventLog, WatcherEvent
 from backend.infrastructure.file_watcher import FileWatcher
 from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
@@ -27,6 +28,7 @@ class IndexService:
         embedder: EmbeddingService,
         qdrant_adapter: QdrantAdapter,
         vault_file_map: VaultFileMap,
+        event_log: EventLog | None = None,
     ) -> None:
         self._vault_path = vault_path
         self._parser = parser
@@ -34,6 +36,7 @@ class IndexService:
         self._embedder = embedder
         self._qdrant = qdrant_adapter
         self._file_map = vault_file_map
+        self._event_log = event_log or EventLog()
         self._last_indexed: datetime | None = None
         self._rebuilding = False
         self._watcher: FileWatcher | None = None
@@ -70,16 +73,22 @@ class IndexService:
 
     def _on_file_changed(self, note_path: str) -> None:
         """Handle a debounced file create/modify event."""
+        event_type = "created" if not self._file_map.has_file(note_path) else "modified"
+        self._event_log.record(WatcherEvent(event_type=event_type, file_path=note_path))
         self._file_map.update_file(None, note_path)
         self.index_single_note(note_path)
-        logger.info("Watcher re-indexed: %s", note_path)
+        logger.info("Watcher re-indexed (%s): %s", event_type, note_path)
 
     def _on_file_deleted(self, note_path: str) -> None:
         """Handle a file delete event (immediate, not debounced)."""
+        self._event_log.record(WatcherEvent(event_type="deleted", file_path=note_path))
         self.delete_note(note_path)
 
     def _on_file_moved(self, old_path: str, new_path: str) -> None:
         """Handle a file move/rename event (immediate, not debounced)."""
+        self._event_log.record(
+            WatcherEvent(event_type="moved", file_path=old_path, dest_path=new_path)
+        )
         self.rename_note(old_path, new_path)
 
     def rebuild_index(self) -> IndexRebuildResponse | None:
@@ -152,6 +161,10 @@ class IndexService:
         self._file_map.update_file(old_path, new_path)
         self.index_single_note(new_path)
         logger.info("Renamed note in index: %s -> %s", old_path, new_path)
+
+    def get_recent_events(self, limit: int = 50) -> list[WatcherEvent]:
+        """Return the most recent watcher events, newest first."""
+        return self._event_log.get_recent(limit)
 
     def get_status(self) -> IndexStatus:
         """Return current index statistics."""
