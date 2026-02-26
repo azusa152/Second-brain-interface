@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from backend.domain.constants import MAX_TOP_K, TOP_K_DEFAULT
+from backend.domain.constants import AUGMENT_TOP_K_DEFAULT, MAX_TOP_K, TOP_K_DEFAULT
 
 
 # --- Core Entities ---
@@ -196,3 +196,45 @@ class IntentClassification(BaseModel):
     confidence: float
     triggered_signals: list[str]
     suggested_query: str | None
+
+
+# --- Context Augmentation ---
+
+
+class AugmentRequest(BaseModel):
+    """Request body for POST /augment."""
+
+    message: str = Field(min_length=1)
+    top_k: int = Field(default=AUGMENT_TOP_K_DEFAULT, ge=1, le=MAX_TOP_K)
+    include_sources: bool = True
+
+
+class SourceCitation(BaseModel):
+    """A single source note cited in the augmented context."""
+
+    note_path: str
+    note_title: str
+    heading_context: str | None
+    score: float
+
+
+class ContextBlock(BaseModel):
+    """Formatted context retrieved from the vault, ready for LLM injection."""
+
+    xml_content: str
+    sources: list[SourceCitation]
+    total_chars: int = Field(
+        description="Total characters of note content placed inside the context block."
+    )
+
+
+class AugmentResponse(BaseModel):
+    """Response from POST /augment."""
+
+    retrieval_attempted: bool
+    context_injected: bool
+    intent_confidence: float
+    triggered_signals: list[str]
+    context_block: ContextBlock | None
+    augmented_prompt: str | None
+    search_time_ms: float | None

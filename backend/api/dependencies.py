@@ -1,5 +1,6 @@
 import os
 
+from backend.application.augment_service import AugmentService
 from backend.application.index_service import IndexService
 from backend.application.intent_service import IntentService
 from backend.application.search_service import SearchService
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
 _index_service: IndexService | None = None
 _search_service: SearchService | None = None
 _intent_service: IntentService | None = None
+_augment_service: AugmentService | None = None
 _scheduler: Scheduler | None = None
 _scheduler_disabled: bool = False  # Memoized when SCHEDULED_REBUILD_ENABLED=false
 
@@ -41,6 +43,7 @@ def initialize_services() -> None:
     get_scheduler()
     intent_service = get_intent_service()
     intent_service.warm_up()
+    get_augment_service()
 
 
 def _parse_watcher_config() -> tuple[bool, float]:
@@ -156,6 +159,19 @@ def get_search_service() -> SearchService:
     return _search_service
 
 
+def get_augment_service() -> AugmentService:
+    """Return the singleton AugmentService, creating it on first call."""
+    global _augment_service  # noqa: PLW0603
+    if _augment_service is None:
+        _augment_service = AugmentService(
+            intent_service=get_intent_service(),
+            search_service=get_search_service(),
+        )
+        logger.info("Initialized AugmentService")
+
+    return _augment_service
+
+
 def get_intent_service() -> IntentService:
     """Return the singleton IntentService, creating it on first call."""
     global _intent_service, _embedder  # noqa: PLW0603
@@ -178,6 +194,12 @@ def get_intent_service() -> IntentService:
         logger.info("Initialized IntentService with %d keywords", len(keywords))
 
     return _intent_service
+
+
+def set_augment_service(service: AugmentService) -> None:
+    """Override the AugmentService singleton (for testing)."""
+    global _augment_service  # noqa: PLW0603
+    _augment_service = service
 
 
 def set_index_service(service: IndexService) -> None:

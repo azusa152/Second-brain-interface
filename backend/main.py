@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.dependencies import get_index_service, get_scheduler, initialize_services
 from backend.application.index_service import IndexService
+from backend.api.augment_routes import router as augment_router
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
 from backend.api.intent_routes import router as intent_router
@@ -68,6 +69,7 @@ app.include_router(index_router)
 app.include_router(search_router)
 app.include_router(note_router)
 app.include_router(intent_router)
+app.include_router(augment_router)
 
 # Mount dashboard static files AFTER API routers (StaticFiles is a catch-all)
 _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")

@@ -92,14 +92,50 @@ Run `make help` to see all available targets.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Service health check |
-| `POST` | `/search` | Semantic + keyword hybrid search |
+| `POST` | `/augment` | **Recommended** — classify intent, retrieve context, return augmented prompt |
+| `POST` | `/search` | Semantic + keyword hybrid search (raw results) |
+| `POST` | `/intent/classify` | Standalone intent classification |
 | `POST` | `/index/rebuild` | Trigger full vault re-index |
 | `GET` | `/index/status` | Index health and statistics |
 | `GET` | `/index/events` | Recent file watcher events |
 | `GET` | `/index/notes` | List all indexed notes |
 | `GET` | `/note/{path}/links` | Backlinks and outlinks for a note |
 
-### Search your vault
+### Augment a prompt with vault context
+
+```bash
+curl -X POST http://localhost:8000/augment \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "What was my investment strategy last year?"}'
+```
+
+Response when personal context is found:
+```json
+{
+  "retrieval_attempted": true,
+  "context_injected": true,
+  "intent_confidence": 0.72,
+  "triggered_signals": ["keyword:investment", "temporal:last_year"],
+  "context_block": { "sources": [...], "total_chars": 312 },
+  "augmented_prompt": "[System: ...]\n<context>...</context>\n<instruction>...</instruction>\n\n[User]: ...",
+  "search_time_ms": 48.3
+}
+```
+
+Response for a general (non-personal) query:
+```json
+{
+  "retrieval_attempted": false,
+  "context_injected": false,
+  "intent_confidence": 0.04,
+  "triggered_signals": [],
+  "context_block": null,
+  "augmented_prompt": null,
+  "search_time_ms": null
+}
+```
+
+### Search your vault (raw results)
 
 ```bash
 curl -X POST http://localhost:8000/search \

@@ -50,6 +50,13 @@ INTENT_DEFAULT_DOMAIN_ANCHORS: list[str] = [
     "goals and personal objectives review",
 ]
 
+# Context Augmentation
+# Default top-k for augment is lower than search to stay within the LLM context budget
+AUGMENT_TOP_K_DEFAULT = 3
+# Max characters of note content placed inside <context>...</context>.
+# At ~4 chars/token this is roughly 1 500 tokens — conservative enough for most LLMs.
+AUGMENT_CONTEXT_MAX_CHARS = 6000
+
 # Event Log
 EVENT_LOG_MAXLEN = 100  # Max events kept in ring buffer
 
