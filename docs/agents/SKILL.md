@@ -6,6 +6,20 @@ This skill gives OpenClaw semantic search and graph traversal over the user's Ob
 
 **Base URL**: `http://localhost:8000` (default; configurable via `SBI_API_PORT` in `.env`)
 
+## Service Management
+
+Use `make` commands to control the service lifecycle:
+
+| Command | Description |
+|---------|-------------|
+| `make up` | Start all services (backend + Qdrant), rebuilding images |
+| `make down` | Stop all services |
+| `make restart` | Stop, rebuild, and restart all services |
+| `make logs` | Tail logs from all running services |
+| `make build` | Build Docker images without starting |
+
+> Use `make restart` after code changes or when the service is in an unhealthy state.
+
 ## Constraints
 
 - **Read-only vault**: The middleware never modifies Obsidian notes. All operations are read-only.

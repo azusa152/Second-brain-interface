@@ -1,4 +1,4 @@
-.PHONY: help up down test lint format build logs
+.PHONY: help up down restart test lint format build logs
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -8,6 +8,9 @@ up: ## Start all services (backend + Qdrant)
 
 down: ## Stop all services
 	docker compose down
+
+restart: ## Restart all services (rebuild images)
+	docker compose down && docker compose up --build -d
 
 build: ## Build Docker images without starting
 	docker compose build

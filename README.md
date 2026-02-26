@@ -64,7 +64,7 @@ SBI_QDRANT_GRPC_PORT=16334
 Then restart the services:
 
 ```bash
-make down && make up
+make restart
 ```
 
 ## Local Development
@@ -85,7 +85,18 @@ make format
 
 ## Makefile Targets
 
-Run `make help` to see all available targets.
+| Target | Description |
+|--------|-------------|
+| `make up` | Start all services (backend + Qdrant), rebuilding images |
+| `make down` | Stop all services |
+| `make restart` | Stop, rebuild, and restart all services |
+| `make logs` | Tail logs from all running services |
+| `make build` | Build Docker images without starting |
+| `make test` | Run test suite |
+| `make lint` | Run linter checks |
+| `make format` | Auto-format and fix code |
+
+Run `make help` to see this list at any time.
 
 ## API Endpoints
 
