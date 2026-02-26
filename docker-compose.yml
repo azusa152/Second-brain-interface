@@ -8,6 +8,7 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OBSIDIAN_VAULT_PATH=/vault
+      - USE_POLLING_OBSERVER=true
     volumes:
       - ${OBSIDIAN_VAULT_PATH:-./_vault}:/vault:ro
     depends_on:

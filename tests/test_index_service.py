@@ -133,6 +133,63 @@ class TestGetStatus:
         assert status.indexed_chunks == 42
         assert status.qdrant_healthy is True
         assert status.watcher_running is False
+        assert status.watcher_mode == "event"
+
+    def test_get_status_should_default_to_event_mode(self) -> None:
+        service, _, _ = _make_service()
+
+        status = service.get_status()
+
+        assert status.watcher_mode == "event"
+
+    def test_get_status_should_report_polling_mode_when_configured(self) -> None:
+        service, mock_qdrant, _ = _make_service()
+        mock_qdrant.get_chunks_count.return_value = 0
+        mock_qdrant.get_indexed_note_paths.return_value = set()
+        service._use_polling = True
+
+        status = service.get_status()
+
+        assert status.watcher_mode == "polling"
+
+
+class TestStartWatcher:
+    def test_start_watcher_should_pass_polling_config_to_file_watcher(self) -> None:
+        from unittest.mock import patch
+
+        service, _, _ = _make_service()
+        service._use_polling = True
+        service._polling_interval = 5.0
+
+        with patch(
+            "backend.application.index_service.FileWatcher"
+        ) as mock_file_watcher_cls:
+            mock_watcher_instance = MagicMock()
+            mock_watcher_instance.is_running = False
+            mock_file_watcher_cls.return_value = mock_watcher_instance
+
+            service.start_watcher()
+
+            _, kwargs = mock_file_watcher_cls.call_args
+            assert kwargs["use_polling"] is True
+            assert kwargs["polling_interval"] == 5.0
+
+    def test_start_watcher_should_pass_event_mode_defaults(self) -> None:
+        from unittest.mock import patch
+
+        service, _, _ = _make_service()
+
+        with patch(
+            "backend.application.index_service.FileWatcher"
+        ) as mock_file_watcher_cls:
+            mock_watcher_instance = MagicMock()
+            mock_watcher_instance.is_running = False
+            mock_file_watcher_cls.return_value = mock_watcher_instance
+
+            service.start_watcher()
+
+            _, kwargs = mock_file_watcher_cls.call_args
+            assert kwargs["use_polling"] is False
 
 
 class TestGetIndexedNotes:

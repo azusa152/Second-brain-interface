@@ -10,6 +10,8 @@ MAX_TOP_K = 20  # Maximum allowed top_k
 # File Watcher
 DEBOUNCE_SECONDS = 2.0  # Wait time before triggering index after file change
 WATCH_EXTENSIONS = [".md"]  # File types to monitor
+POLLING_INTERVAL_SECONDS = 3.0  # PollingObserver check interval (seconds)
+POLLING_INTERVAL_MIN_SECONDS = 0.5  # Minimum allowed polling interval to avoid busy-loop
 
 # Event Log
 EVENT_LOG_MAXLEN = 100  # Max events kept in ring buffer

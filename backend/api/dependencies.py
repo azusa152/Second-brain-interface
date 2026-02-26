@@ -2,6 +2,7 @@ import os
 
 from backend.application.index_service import IndexService
 from backend.application.search_service import SearchService
+from backend.domain.constants import POLLING_INTERVAL_SECONDS
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.embedding import EmbeddingService
 from backend.infrastructure.event_log import EventLog
@@ -27,12 +28,38 @@ def initialize_services() -> None:
     get_search_service()
 
 
+def _parse_watcher_config() -> tuple[bool, float]:
+    """Read USE_POLLING_OBSERVER and POLLING_INTERVAL_SECONDS from the environment.
+
+    Returns (use_polling, polling_interval). Falls back to safe defaults and logs a
+    warning when the numeric interval value cannot be parsed.
+    """
+    use_polling = os.getenv("USE_POLLING_OBSERVER", "false").lower() == "true"
+    try:
+        polling_interval = float(
+            os.getenv("POLLING_INTERVAL_SECONDS", str(POLLING_INTERVAL_SECONDS))
+        )
+    except ValueError:
+        logger.warning(
+            "Invalid POLLING_INTERVAL_SECONDS env var; using default %.1fs",
+            POLLING_INTERVAL_SECONDS,
+        )
+        polling_interval = POLLING_INTERVAL_SECONDS
+    return use_polling, polling_interval
+
+
 def get_index_service() -> IndexService:
     """Return the singleton IndexService, creating it on first call."""
     global _index_service, _embedder, _qdrant, _event_log  # noqa: PLW0603
     if _index_service is None:
         vault_path = os.getenv("OBSIDIAN_VAULT_PATH", "/vault")
-        logger.info("Initializing IndexService with vault: %s", vault_path)
+        use_polling, polling_interval = _parse_watcher_config()
+        logger.info(
+            "Initializing IndexService with vault: %s (polling=%s, interval=%.1fs)",
+            vault_path,
+            use_polling,
+            polling_interval,
+        )
 
         vault_file_map = VaultFileMap(vault_path)
         parser = MarkdownParser(vault_file_map)
@@ -49,6 +76,8 @@ def get_index_service() -> IndexService:
             qdrant_adapter=_qdrant,
             vault_file_map=vault_file_map,
             event_log=_event_log,
+            use_polling=use_polling,
+            polling_interval=polling_interval,
         )
         _index_service.initialize()
 

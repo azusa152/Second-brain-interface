@@ -7,8 +7,10 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
+from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 
-from backend.infrastructure.file_watcher import FileWatcher
+from backend.infrastructure.file_watcher import FileWatcher, _create_observer
 
 
 @pytest.fixture()
@@ -65,6 +67,85 @@ class TestFileWatcherLifecycle:
         )
         watcher.stop()  # Not started — should not raise
         assert not watcher.is_running
+
+
+class TestObserverModeSelection:
+    """Test that the correct observer type is selected based on use_polling flag."""
+
+    def test_create_observer_should_return_polling_observer_when_true(self) -> None:
+        observer = _create_observer(use_polling=True, polling_interval=3.0)
+        assert isinstance(observer, PollingObserver)
+
+    def test_create_observer_should_return_native_observer_when_false(self) -> None:
+        observer = _create_observer(use_polling=False, polling_interval=3.0)
+        assert isinstance(observer, Observer)
+        assert not isinstance(observer, PollingObserver)
+
+    def test_watcher_should_report_polling_mode(self, temp_vault: str) -> None:
+        watcher = FileWatcher(
+            vault_path=temp_vault,
+            on_changed=lambda p: None,
+            on_deleted=lambda p: None,
+            on_moved=lambda o, n: None,
+            use_polling=True,
+        )
+        assert watcher.observer_mode == "polling"
+
+    def test_watcher_should_report_event_mode(self, temp_vault: str) -> None:
+        watcher = FileWatcher(
+            vault_path=temp_vault,
+            on_changed=lambda p: None,
+            on_deleted=lambda p: None,
+            on_moved=lambda o, n: None,
+            use_polling=False,
+        )
+        assert watcher.observer_mode == "event"
+
+    def test_watcher_should_default_to_event_mode(self, temp_vault: str) -> None:
+        watcher = FileWatcher(
+            vault_path=temp_vault,
+            on_changed=lambda p: None,
+            on_deleted=lambda p: None,
+            on_moved=lambda o, n: None,
+        )
+        assert watcher.observer_mode == "event"
+
+    def test_polling_watcher_should_start_and_stop(self, temp_vault: str) -> None:
+        watcher = FileWatcher(
+            vault_path=temp_vault,
+            on_changed=lambda p: None,
+            on_deleted=lambda p: None,
+            on_moved=lambda o, n: None,
+            use_polling=True,
+            polling_interval=1.0,
+        )
+        watcher.start()
+        assert watcher.is_running
+        watcher.stop()
+        assert not watcher.is_running
+
+    def test_polling_watcher_should_detect_file_creation(
+        self, temp_vault: str
+    ) -> None:
+        on_changed = MagicMock()
+        watcher = FileWatcher(
+            vault_path=temp_vault,
+            on_changed=on_changed,
+            on_deleted=lambda p: None,
+            on_moved=lambda o, n: None,
+            use_polling=True,
+            polling_interval=1.0,
+        )
+        watcher.start()
+
+        try:
+            _write_file(temp_vault, "polling_note.md")
+            time.sleep(3)
+            on_changed.assert_called()
+            args_list = [c.args[0] for c in on_changed.call_args_list]
+            assert any("polling_note.md" in arg for arg in args_list)
+        finally:
+            watcher.stop()
 
 
 class TestFileWatcherEvents:
@@ -223,6 +304,8 @@ class TestIndexServiceWatcherIntegration:
 
         service = IndexService.__new__(IndexService)
         service._vault_path = "/fake"
+        service._use_polling = True
+        service._polling_interval = 3.0
         service._qdrant = MagicMock()
         service._qdrant.get_chunks_count.return_value = 0
         service._qdrant.get_indexed_note_paths.return_value = []
@@ -230,14 +313,15 @@ class TestIndexServiceWatcherIntegration:
         service._last_indexed = None
         service._rebuilding = False
 
-        # Simulate watcher running
         mock_watcher = MagicMock()
         mock_watcher.is_running = True
+        mock_watcher.observer_mode = "polling"
         service._watcher = mock_watcher
         service._debouncer = MagicMock()
 
         status = service.get_status()
         assert status.watcher_running is True
+        assert status.watcher_mode == "polling"
 
     def test_index_service_should_report_watcher_running_false_when_no_watcher(
         self,
@@ -246,6 +330,8 @@ class TestIndexServiceWatcherIntegration:
 
         service = IndexService.__new__(IndexService)
         service._vault_path = "/fake"
+        service._use_polling = False
+        service._polling_interval = 3.0
         service._qdrant = MagicMock()
         service._qdrant.get_chunks_count.return_value = 0
         service._qdrant.get_indexed_note_paths.return_value = []
@@ -257,6 +343,7 @@ class TestIndexServiceWatcherIntegration:
 
         status = service.get_status()
         assert status.watcher_running is False
+        assert status.watcher_mode == "event"
 
     def test_stop_watcher_should_cancel_debouncer_and_stop_watcher(self) -> None:
         from backend.application.index_service import IndexService

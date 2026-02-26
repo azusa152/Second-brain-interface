@@ -2,7 +2,7 @@ import os
 import time
 from datetime import datetime, timezone
 
-from backend.domain.constants import WATCH_EXTENSIONS
+from backend.domain.constants import POLLING_INTERVAL_SECONDS, WATCH_EXTENSIONS
 from backend.domain.models import IndexRebuildResponse, IndexStatus, IndexedNoteItem
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.debouncer import Debouncer
@@ -29,6 +29,8 @@ class IndexService:
         qdrant_adapter: QdrantAdapter,
         vault_file_map: VaultFileMap,
         event_log: EventLog | None = None,
+        use_polling: bool = False,
+        polling_interval: float = POLLING_INTERVAL_SECONDS,
     ) -> None:
         self._vault_path = vault_path
         self._parser = parser
@@ -37,6 +39,8 @@ class IndexService:
         self._qdrant = qdrant_adapter
         self._file_map = vault_file_map
         self._event_log = event_log or EventLog()
+        self._use_polling = use_polling
+        self._polling_interval = polling_interval
         self._last_indexed: datetime | None = None
         self._rebuilding = False
         self._watcher: FileWatcher | None = None
@@ -59,6 +63,8 @@ class IndexService:
             on_changed=self._debouncer.trigger,  # Debounced: coalesce rapid saves
             on_deleted=self._on_file_deleted,  # Immediate: deletes are one-shot
             on_moved=self._on_file_moved,  # Immediate: renames are one-shot
+            use_polling=self._use_polling,
+            polling_interval=self._polling_interval,
         )
         self._watcher.start()
         logger.info("Watcher started for vault: %s", self._vault_path)
@@ -175,12 +181,19 @@ class IndexService:
         chunks_count = self._qdrant.get_chunks_count()
         note_paths = self._qdrant.get_indexed_note_paths()
 
+        watcher_mode = (
+            self._watcher.observer_mode
+            if self._watcher is not None
+            else ("polling" if self._use_polling else "event")
+        )
+
         return IndexStatus(
             indexed_notes=len(note_paths),
             indexed_chunks=chunks_count,
             last_indexed=self._last_indexed,
             watcher_running=self._watcher is not None and self._watcher.is_running,
             qdrant_healthy=self._qdrant.is_healthy(),
+            watcher_mode=watcher_mode,
         )
 
     def _collect_md_files(self) -> list[str]:

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -140,6 +140,7 @@ class IndexStatus(BaseModel):
     last_indexed: datetime | None = None
     watcher_running: bool
     qdrant_healthy: bool
+    watcher_mode: Literal["polling", "event"] = "event"
 
 
 # --- Watcher Events ---

@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Callable
+from typing import Literal
 
 from watchdog.events import (
     FileCreatedEvent,
@@ -11,11 +12,31 @@ from watchdog.events import (
     FileSystemEventHandler,
 )
 from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 
-from backend.domain.constants import WATCH_EXTENSIONS
+from backend.domain.constants import (
+    POLLING_INTERVAL_SECONDS,
+    POLLING_INTERVAL_MIN_SECONDS,
+    WATCH_EXTENSIONS,
+)
 from backend.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def _create_observer(
+    use_polling: bool, polling_interval: float
+) -> Observer | PollingObserver:
+    if use_polling:
+        safe_interval = max(POLLING_INTERVAL_MIN_SECONDS, polling_interval)
+        if safe_interval != polling_interval:
+            logger.warning(
+                "polling_interval %.2fs is below minimum; clamped to %.2fs",
+                polling_interval,
+                safe_interval,
+            )
+        return PollingObserver(timeout=safe_interval)
+    return Observer()
 
 
 class _VaultEventHandler(FileSystemEventHandler):
@@ -95,6 +116,8 @@ class FileWatcher:
         on_changed: Callable[[str], None],
         on_deleted: Callable[[str], None],
         on_moved: Callable[[str, str], None],
+        use_polling: bool = False,
+        polling_interval: float = POLLING_INTERVAL_SECONDS,
     ) -> None:
         self._vault_path = vault_path
         self._handler = _VaultEventHandler(
@@ -103,7 +126,10 @@ class FileWatcher:
             on_deleted=on_deleted,
             on_moved=on_moved,
         )
-        self._observer = Observer()
+        self._observer = _create_observer(use_polling, polling_interval)
+        self._mode: Literal["polling", "event"] = (
+            "polling" if use_polling else "event"
+        )
         self._running = False
 
     def start(self) -> None:
@@ -113,7 +139,9 @@ class FileWatcher:
         self._observer.schedule(self._handler, self._vault_path, recursive=True)
         self._observer.start()
         self._running = True
-        logger.info("File watcher started for: %s", self._vault_path)
+        logger.info(
+            "File watcher started for: %s (mode=%s)", self._vault_path, self._mode
+        )
 
     def stop(self) -> None:
         """Stop watching the vault directory."""
@@ -128,3 +156,8 @@ class FileWatcher:
     def is_running(self) -> bool:
         """Return whether the watcher is currently active."""
         return self._running
+
+    @property
+    def observer_mode(self) -> Literal["polling", "event"]:
+        """Return the observer mode for status reporting."""
+        return self._mode

@@ -202,3 +202,4 @@ class TestFullPipeline:
         assert status.indexed_chunks == 42
         assert status.qdrant_healthy is True
         assert status.watcher_running is False
+        assert status.watcher_mode == "event"
