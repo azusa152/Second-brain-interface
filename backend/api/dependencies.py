@@ -1,8 +1,11 @@
 import os
 
 from backend.application.index_service import IndexService
+from backend.application.intent_service import IntentService
 from backend.application.search_service import SearchService
 from backend.domain.constants import (
+    INTENT_DEFAULT_DOMAIN_ANCHORS,
+    INTENT_DEFAULT_KEYWORDS,
     POLLING_INTERVAL_SECONDS,
     REBUILD_CRON_HOUR,
     REBUILD_CRON_MINUTE,
@@ -21,6 +24,7 @@ logger = get_logger(__name__)
 
 _index_service: IndexService | None = None
 _search_service: SearchService | None = None
+_intent_service: IntentService | None = None
 _scheduler: Scheduler | None = None
 _scheduler_disabled: bool = False  # Memoized when SCHEDULED_REBUILD_ENABLED=false
 
@@ -35,6 +39,8 @@ def initialize_services() -> None:
     get_index_service()
     get_search_service()
     get_scheduler()
+    intent_service = get_intent_service()
+    intent_service.warm_up()
 
 
 def _parse_watcher_config() -> tuple[bool, float]:
@@ -150,6 +156,30 @@ def get_search_service() -> SearchService:
     return _search_service
 
 
+def get_intent_service() -> IntentService:
+    """Return the singleton IntentService, creating it on first call."""
+    global _intent_service, _embedder  # noqa: PLW0603
+    if _intent_service is None:
+        _embedder = _embedder or EmbeddingService()
+
+        # Allow per-deployment keyword overrides via comma-separated env var
+        keywords_env = os.getenv("INTENT_PERSONAL_KEYWORDS", "")
+        keywords = (
+            [kw.strip() for kw in keywords_env.split(",") if kw.strip()]
+            if keywords_env
+            else list(INTENT_DEFAULT_KEYWORDS)
+        )
+
+        _intent_service = IntentService(
+            embedder=_embedder,
+            keywords=keywords,
+            domain_anchors=list(INTENT_DEFAULT_DOMAIN_ANCHORS),
+        )
+        logger.info("Initialized IntentService with %d keywords", len(keywords))
+
+    return _intent_service
+
+
 def set_index_service(service: IndexService) -> None:
     """Override the IndexService singleton (for testing)."""
     global _index_service  # noqa: PLW0603
@@ -160,6 +190,12 @@ def set_search_service(service: SearchService) -> None:
     """Override the SearchService singleton (for testing)."""
     global _search_service  # noqa: PLW0603
     _search_service = service
+
+
+def set_intent_service(service: IntentService) -> None:
+    """Override the IntentService singleton (for testing)."""
+    global _intent_service  # noqa: PLW0603
+    _intent_service = service
 
 
 def set_scheduler(scheduler: Scheduler | None) -> None:

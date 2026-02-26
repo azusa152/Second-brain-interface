@@ -178,3 +178,21 @@ class IndexedNotesResponse(BaseModel):
 
     notes: list[IndexedNoteItem]
     total: int
+
+
+# --- Intent Classification ---
+
+
+class IntentRequest(BaseModel):
+    """Request body for POST /intent/classify."""
+
+    message: str = Field(min_length=1)
+
+
+class IntentClassification(BaseModel):
+    """Result of intent classification."""
+
+    requires_personal_context: bool
+    confidence: float
+    triggered_signals: list[str]
+    suggested_query: str | None
