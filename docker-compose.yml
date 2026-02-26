@@ -9,8 +9,12 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - OBSIDIAN_VAULT_PATH=/vault
       - USE_POLLING_OBSERVER=true
+      - HASH_REGISTRY_DATA_PATH=/data
+      - SCHEDULED_REBUILD_ENABLED=true
+      - STARTUP_INCREMENTAL_REBUILD=true
     volumes:
       - ${OBSIDIAN_VAULT_PATH:-./_vault}:/vault:ro
+      - sbi_data:/data
     depends_on:
       qdrant:
         condition: service_healthy
@@ -39,3 +43,4 @@ services:
 
 volumes:
   qdrant_data:
+  sbi_data:

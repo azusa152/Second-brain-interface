@@ -1,9 +1,14 @@
 import os
+import shutil
+import tempfile
 from unittest.mock import MagicMock
+
+import pytest
 
 from backend.application.index_service import IndexService
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.event_log import EventLog
+from backend.infrastructure.hash_registry import HashRegistry
 from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.vault_file_map import VaultFileMap
 
@@ -68,11 +73,184 @@ class TestRebuildIndex:
             MagicMock(indices=[1], values=[0.5]) for _ in texts
         ]
 
-        # Simulate concurrent rebuild
-        service._rebuilding = True
-        result = service.rebuild_index()
+        # Simulate concurrent rebuild by holding the lock
+        service._rebuild_lock.acquire()
+        try:
+            result = service.rebuild_index()
+        finally:
+            service._rebuild_lock.release()
 
         assert result is None
+
+
+def _make_service_with_registry(
+    vault_path: str,
+    data_dir: str,
+) -> tuple[IndexService, MagicMock, MagicMock, HashRegistry]:
+    """Create an IndexService wired with a real HashRegistry for incremental rebuild tests."""
+    vault_file_map = VaultFileMap(vault_path)
+    parser = MarkdownParser(vault_file_map)
+    chunker = Chunker()
+    mock_embedder = MagicMock()
+    mock_embedder.embed_batch.side_effect = lambda texts: [[0.0] * 384 for _ in texts]
+    mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
+        MagicMock(indices=[1], values=[0.5]) for _ in texts
+    ]
+    mock_qdrant = MagicMock()
+    mock_qdrant.is_healthy.return_value = True
+    mock_qdrant.get_chunks_count.return_value = 0
+    mock_qdrant.get_indexed_note_paths.return_value = set()
+
+    hash_registry = HashRegistry(data_dir)
+
+    service = IndexService(
+        vault_path=vault_path,
+        parser=parser,
+        chunker=chunker,
+        embedder=mock_embedder,
+        qdrant_adapter=mock_qdrant,
+        vault_file_map=vault_file_map,
+        hash_registry=hash_registry,
+    )
+    service.initialize()
+    return service, mock_qdrant, mock_embedder, hash_registry
+
+
+@pytest.fixture()
+def temp_vault():
+    """Temporary vault directory pre-populated with two .md files."""
+    d = tempfile.mkdtemp(prefix="test_vault_")
+    _write(d, "a.md", "# Note A\n\nContent A.")
+    _write(d, "b.md", "# Note B\n\nContent B.")
+    yield d
+    shutil.rmtree(d, ignore_errors=True)
+
+
+@pytest.fixture()
+def data_dir():
+    """Temporary data directory for the hash registry."""
+    d = tempfile.mkdtemp(prefix="test_data_")
+    yield d
+    shutil.rmtree(d, ignore_errors=True)
+
+
+def _write(vault: str, rel_path: str, content: str) -> str:
+    abs_path = os.path.join(vault, rel_path)
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    with open(abs_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return abs_path
+
+
+class TestIncrementalRebuild:
+    def test_first_run_indexes_all_files(self, temp_vault: str, data_dir: str) -> None:
+        """On the first run (empty registry) every file is treated as new."""
+        service, mock_qdrant, _, _ = _make_service_with_registry(temp_vault, data_dir)
+
+        service.incremental_rebuild()
+
+        assert mock_qdrant.bulk_upsert_chunks.call_count == 2
+
+    def test_unchanged_files_are_skipped(self, temp_vault: str, data_dir: str) -> None:
+        """Second run with no file changes should not call bulk_upsert_chunks."""
+        service, mock_qdrant, _, _ = _make_service_with_registry(temp_vault, data_dir)
+        service.incremental_rebuild()
+        mock_qdrant.reset_mock()
+
+        service.incremental_rebuild()
+
+        mock_qdrant.bulk_upsert_chunks.assert_not_called()
+
+    def test_changed_file_is_reindexed(self, temp_vault: str, data_dir: str) -> None:
+        """Only the file whose content changed should be re-indexed on second run."""
+        service, mock_qdrant, _, _ = _make_service_with_registry(temp_vault, data_dir)
+        service.incremental_rebuild()
+        mock_qdrant.reset_mock()
+
+        _write(temp_vault, "a.md", "# Note A\n\nUpdated content.")
+        service.incremental_rebuild()
+
+        assert mock_qdrant.bulk_upsert_chunks.call_count == 1
+        mock_qdrant.delete_by_note_path.assert_any_call("a.md")
+
+    def test_deleted_file_is_removed_from_qdrant(
+        self, temp_vault: str, data_dir: str
+    ) -> None:
+        """A file removed from the vault should be deleted from Qdrant and the registry."""
+        service, mock_qdrant, _, hash_registry = _make_service_with_registry(
+            temp_vault, data_dir
+        )
+        service.incremental_rebuild()
+        mock_qdrant.reset_mock()
+
+        os.remove(os.path.join(temp_vault, "b.md"))
+        service.incremental_rebuild()
+
+        mock_qdrant.delete_by_note_path.assert_any_call("b.md")
+        mock_qdrant.delete_links_by_source.assert_any_call("b.md")
+        assert hash_registry.get_hash("b.md") is None
+
+    def test_last_scheduled_rebuild_is_set_after_run(
+        self, temp_vault: str, data_dir: str
+    ) -> None:
+        """last_scheduled_rebuild timestamp should be set after a successful run."""
+        service, _, _, _ = _make_service_with_registry(temp_vault, data_dir)
+        assert service.get_status().last_scheduled_rebuild is None
+
+        service.incremental_rebuild()
+
+        assert service.get_status().last_scheduled_rebuild is not None
+
+    def test_second_concurrent_call_is_skipped(
+        self, temp_vault: str, data_dir: str
+    ) -> None:
+        """If the lock is held, a concurrent incremental_rebuild call returns immediately."""
+        service, mock_qdrant, _, _ = _make_service_with_registry(temp_vault, data_dir)
+
+        service._rebuild_lock.acquire()
+        try:
+            service.incremental_rebuild()
+        finally:
+            service._rebuild_lock.release()
+
+        mock_qdrant.bulk_upsert_chunks.assert_not_called()
+
+    def test_falls_back_to_full_rebuild_when_no_registry(self) -> None:
+        """With no HashRegistry, incremental_rebuild delegates to rebuild_index."""
+        service, mock_qdrant, mock_embedder = _make_service()
+        mock_embedder.embed_batch.side_effect = lambda texts: [
+            [0.0] * 384 for _ in texts
+        ]
+        mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
+            MagicMock(indices=[1], values=[0.5]) for _ in texts
+        ]
+        assert service._hash_registry is None
+
+        service.incremental_rebuild()
+
+        assert mock_qdrant.bulk_upsert_chunks.called
+
+    def test_registry_is_persisted_after_run(self, temp_vault: str, data_dir: str) -> None:
+        """hash_registry.json should exist on disk after a completed incremental rebuild."""
+        service, _, _, _ = _make_service_with_registry(temp_vault, data_dir)
+        service.incremental_rebuild()
+
+        registry_path = os.path.join(data_dir, "hash_registry.json")
+        assert os.path.exists(registry_path)
+
+    def test_file_map_is_refreshed_before_processing(
+        self, temp_vault: str, data_dir: str
+    ) -> None:
+        """New files added after initialize() should be known to VaultFileMap during rebuild."""
+        service, _, _, _ = _make_service_with_registry(temp_vault, data_dir)
+        new_file = _write(temp_vault, "c.md", "# Note C\n\nNew file.")
+
+        service.incremental_rebuild()
+
+        # c.md was not present at initialize() time; the rebuild should have scanned
+        # and added it to the file map
+        assert service._file_map.has_file("c.md")
+        os.remove(new_file)
 
 
 class TestIndexSingleNote:

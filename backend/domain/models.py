@@ -141,6 +141,7 @@ class IndexStatus(BaseModel):
     watcher_running: bool
     qdrant_healthy: bool
     watcher_mode: Literal["polling", "event"] = "event"
+    last_scheduled_rebuild: datetime | None = None
 
 
 # --- Watcher Events ---

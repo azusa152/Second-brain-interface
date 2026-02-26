@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -9,6 +10,7 @@ from backend.infrastructure.debouncer import Debouncer
 from backend.infrastructure.embedding import EmbeddingService
 from backend.infrastructure.event_log import EventLog, WatcherEvent
 from backend.infrastructure.file_watcher import FileWatcher
+from backend.infrastructure.hash_registry import HashRegistry, compute_sha256
 from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
 from backend.infrastructure.vault_file_map import VaultFileMap
@@ -31,6 +33,7 @@ class IndexService:
         event_log: EventLog | None = None,
         use_polling: bool = False,
         polling_interval: float = POLLING_INTERVAL_SECONDS,
+        hash_registry: HashRegistry | None = None,
     ) -> None:
         self._vault_path = vault_path
         self._parser = parser
@@ -41,8 +44,10 @@ class IndexService:
         self._event_log = event_log or EventLog()
         self._use_polling = use_polling
         self._polling_interval = polling_interval
+        self._hash_registry = hash_registry
         self._last_indexed: datetime | None = None
-        self._rebuilding = False
+        self._last_scheduled_rebuild: datetime | None = None
+        self._rebuild_lock = threading.Lock()
         self._watcher: FileWatcher | None = None
         self._debouncer: Debouncer | None = None
 
@@ -99,10 +104,9 @@ class IndexService:
 
     def rebuild_index(self) -> IndexRebuildResponse | None:
         """Full re-index of all .md files in vault. Returns None if already running."""
-        if self._rebuilding:
+        if not self._rebuild_lock.acquire(blocking=False):
             return None
 
-        self._rebuilding = True
         start_time = time.time()
         notes_indexed = 0
         chunks_created = 0
@@ -138,7 +142,80 @@ class IndexService:
                 time_taken_seconds=round(elapsed, 1),
             )
         finally:
-            self._rebuilding = False
+            self._rebuild_lock.release()
+
+    def incremental_rebuild(self) -> None:
+        """Re-index only files whose SHA-256 content hash has changed since last run.
+
+        Compares all vault .md files against the HashRegistry. Only new or changed
+        files are re-indexed. Files present in the registry but missing from the vault
+        are removed from Qdrant and the registry. Saves the registry once at the end.
+
+        If no HashRegistry was provided, falls back to a full rebuild.
+        """
+        if self._hash_registry is None:
+            logger.info("No hash registry; falling back to full rebuild")
+            self.rebuild_index()
+            return
+
+        if not self._rebuild_lock.acquire(blocking=False):
+            logger.info("Incremental rebuild skipped: another rebuild is already running")
+            return
+
+        start_time = time.time()
+        changed = 0
+        skipped = 0
+        deleted = 0
+
+        try:
+            # Refresh file map so wikilink resolution is current for this batch.
+            # This handles the case where the watcher missed new file creations.
+            self._file_map.scan()
+            md_files = self._collect_md_files()
+            vault_paths = set(md_files)
+            known_paths = self._hash_registry.get_all_known_paths()
+
+            for rel_path in md_files:
+                abs_path = os.path.join(self._vault_path, rel_path)
+                content = self._read_file(abs_path)
+                if content is None:
+                    continue
+
+                current_hash = compute_sha256(content)
+                stored_hash = self._hash_registry.get_hash(rel_path)
+
+                if current_hash == stored_hash:
+                    skipped += 1
+                    continue
+
+                self._qdrant.delete_by_note_path(rel_path)
+                self._qdrant.delete_links_by_source(rel_path)
+                self._index_file(abs_path, rel_path)
+                self._hash_registry.set_hash(rel_path, current_hash)
+                changed += 1
+
+            for stale_path in known_paths - vault_paths:
+                self._qdrant.delete_by_note_path(stale_path)
+                self._qdrant.delete_links_by_source(stale_path)
+                self._hash_registry.remove(stale_path)
+                deleted += 1
+
+            self._hash_registry.save()
+            self._last_scheduled_rebuild = datetime.now(tz=timezone.utc)
+            self._last_indexed = self._last_scheduled_rebuild
+
+            elapsed = time.time() - start_time
+            logger.info(
+                "Incremental rebuild: %d changed, %d skipped, %d deleted in %.1fs",
+                changed,
+                skipped,
+                deleted,
+                elapsed,
+            )
+        except Exception:
+            logger.exception("Incremental rebuild failed")
+        finally:
+            self._rebuild_lock.release()
 
     def index_single_note(self, note_path: str) -> None:
         """Index or update a single note."""
@@ -194,6 +271,7 @@ class IndexService:
             watcher_running=self._watcher is not None and self._watcher.is_running,
             qdrant_healthy=self._qdrant.is_healthy(),
             watcher_mode=watcher_mode,
+            last_scheduled_rebuild=self._last_scheduled_rebuild,
         )
 
     def _collect_md_files(self) -> list[str]:

@@ -311,7 +311,8 @@ class TestIndexServiceWatcherIntegration:
         service._qdrant.get_indexed_note_paths.return_value = []
         service._qdrant.is_healthy.return_value = True
         service._last_indexed = None
-        service._rebuilding = False
+        service._last_scheduled_rebuild = None
+        service._rebuild_lock = __import__("threading").Lock()
 
         mock_watcher = MagicMock()
         mock_watcher.is_running = True
@@ -337,7 +338,8 @@ class TestIndexServiceWatcherIntegration:
         service._qdrant.get_indexed_note_paths.return_value = []
         service._qdrant.is_healthy.return_value = True
         service._last_indexed = None
-        service._rebuilding = False
+        service._last_scheduled_rebuild = None
+        service._rebuild_lock = __import__("threading").Lock()
         service._watcher = None
         service._debouncer = None
 

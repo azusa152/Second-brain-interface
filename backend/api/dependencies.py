@@ -2,12 +2,18 @@ import os
 
 from backend.application.index_service import IndexService
 from backend.application.search_service import SearchService
-from backend.domain.constants import POLLING_INTERVAL_SECONDS
+from backend.domain.constants import (
+    POLLING_INTERVAL_SECONDS,
+    REBUILD_CRON_HOUR,
+    REBUILD_CRON_MINUTE,
+)
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.embedding import EmbeddingService
 from backend.infrastructure.event_log import EventLog
+from backend.infrastructure.hash_registry import HashRegistry
 from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
+from backend.infrastructure.scheduler import Scheduler
 from backend.infrastructure.vault_file_map import VaultFileMap
 from backend.logging_config import get_logger
 
@@ -15,6 +21,8 @@ logger = get_logger(__name__)
 
 _index_service: IndexService | None = None
 _search_service: SearchService | None = None
+_scheduler: Scheduler | None = None
+_scheduler_disabled: bool = False  # Memoized when SCHEDULED_REBUILD_ENABLED=false
 
 # Shared infrastructure singletons (created once, shared across services)
 _embedder: EmbeddingService | None = None
@@ -26,6 +34,7 @@ def initialize_services() -> None:
     """Initialize all services at startup. Called from FastAPI lifespan."""
     get_index_service()
     get_search_service()
+    get_scheduler()
 
 
 def _parse_watcher_config() -> tuple[bool, float]:
@@ -61,12 +70,14 @@ def get_index_service() -> IndexService:
             polling_interval,
         )
 
+        data_path = os.getenv("HASH_REGISTRY_DATA_PATH", "/data")
         vault_file_map = VaultFileMap(vault_path)
         parser = MarkdownParser(vault_file_map)
         chunker = Chunker()
         _embedder = _embedder or EmbeddingService()
         _qdrant = _qdrant or QdrantAdapter()
         _event_log = _event_log or EventLog()
+        hash_registry = HashRegistry(data_path)
 
         _index_service = IndexService(
             vault_path=vault_path,
@@ -78,10 +89,49 @@ def get_index_service() -> IndexService:
             event_log=_event_log,
             use_polling=use_polling,
             polling_interval=polling_interval,
+            hash_registry=hash_registry,
         )
         _index_service.initialize()
 
     return _index_service
+
+
+def get_scheduler() -> Scheduler | None:
+    """Return the singleton Scheduler if scheduling is enabled, or None.
+
+    The disabled state is memoized so the env var is only read once per process,
+    consistent with how all other get_*() singletons behave.
+    """
+    global _scheduler, _scheduler_disabled  # noqa: PLW0603
+    if _scheduler_disabled:
+        return None
+    if _scheduler is None:
+        enabled = os.getenv("SCHEDULED_REBUILD_ENABLED", "true").lower() == "true"
+        if not enabled:
+            logger.info("Scheduled rebuild disabled (SCHEDULED_REBUILD_ENABLED=false)")
+            _scheduler_disabled = True
+            return None
+
+        try:
+            cron_hour = int(os.getenv("REBUILD_CRON_HOUR", str(REBUILD_CRON_HOUR)))
+            cron_minute = int(os.getenv("REBUILD_CRON_MINUTE", str(REBUILD_CRON_MINUTE)))
+        except ValueError:
+            logger.warning(
+                "Invalid REBUILD_CRON_HOUR/MINUTE env vars; using defaults %02d:%02d",
+                REBUILD_CRON_HOUR,
+                REBUILD_CRON_MINUTE,
+            )
+            cron_hour = REBUILD_CRON_HOUR
+            cron_minute = REBUILD_CRON_MINUTE
+
+        index_service = get_index_service()
+        _scheduler = Scheduler(
+            cron_hour=cron_hour,
+            cron_minute=cron_minute,
+            job_fn=index_service.incremental_rebuild,
+        )
+
+    return _scheduler
 
 
 def get_search_service() -> SearchService:
@@ -110,3 +160,10 @@ def set_search_service(service: SearchService) -> None:
     """Override the SearchService singleton (for testing)."""
     global _search_service  # noqa: PLW0603
     _search_service = service
+
+
+def set_scheduler(scheduler: Scheduler | None) -> None:
+    """Override the Scheduler singleton (for testing). Also resets the disabled flag."""
+    global _scheduler, _scheduler_disabled  # noqa: PLW0603
+    _scheduler = scheduler
+    _scheduler_disabled = False

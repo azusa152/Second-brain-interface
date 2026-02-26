@@ -1,11 +1,13 @@
 import os
+import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from backend.api.dependencies import get_index_service, initialize_services
+from backend.api.dependencies import get_index_service, get_scheduler, initialize_services
+from backend.application.index_service import IndexService
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
 from backend.api.note_routes import router as note_router
@@ -18,17 +20,39 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
-    """Initialize services on startup, start file watcher, stop on shutdown."""
+    """Initialize services on startup, start file watcher and scheduler, stop on shutdown."""
     logger.info("Starting up: initializing services")
     initialize_services()
 
     index_service = get_index_service()
     index_service.start_watcher()
 
+    scheduler = get_scheduler()
+    if scheduler is not None:
+        await scheduler.start()
+
+    _maybe_startup_incremental_rebuild(index_service)
+
     yield
 
     logger.info("Shutting down")
     index_service.stop_watcher()
+    if scheduler is not None:
+        await scheduler.stop()
+
+
+def _maybe_startup_incremental_rebuild(index_service: IndexService) -> None:
+    """Run incremental_rebuild in a background thread if STARTUP_INCREMENTAL_REBUILD is enabled."""
+    enabled = os.getenv("STARTUP_INCREMENTAL_REBUILD", "true").lower() == "true"
+    if not enabled:
+        return
+    logger.info("Running startup incremental rebuild in background thread")
+    t = threading.Thread(
+        target=index_service.incremental_rebuild,
+        name="startup-incremental-rebuild",
+        daemon=True,
+    )
+    t.start()
 
 
 app = FastAPI(

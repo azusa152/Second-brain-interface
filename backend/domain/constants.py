@@ -13,6 +13,11 @@ WATCH_EXTENSIONS = [".md"]  # File types to monitor
 POLLING_INTERVAL_SECONDS = 3.0  # PollingObserver check interval (seconds)
 POLLING_INTERVAL_MIN_SECONDS = 0.5  # Minimum allowed polling interval to avoid busy-loop
 
+# Scheduler / Incremental Rebuild
+REBUILD_CRON_HOUR = 3  # Daily rebuild at 03:00 UTC
+REBUILD_CRON_MINUTE = 0
+HASH_REGISTRY_FILENAME = "hash_registry.json"
+
 # Event Log
 EVENT_LOG_MAXLEN = 100  # Max events kept in ring buffer
 
