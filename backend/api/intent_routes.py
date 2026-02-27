@@ -36,7 +36,7 @@ def classify_intent(
     """
     try:
         return service.classify(request.message)
-    except Exception:
+    except Exception as err:
         logger.exception("Intent classification failed for message: %.80s", request.message)
         raise HTTPException(
             status_code=503,
@@ -44,4 +44,4 @@ def classify_intent(
                 "error_code": "INTENT_CLASSIFIER_UNAVAILABLE",
                 "message": "Intent classification is temporarily unavailable.",
             },
-        )
+        ) from err

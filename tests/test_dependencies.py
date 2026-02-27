@@ -7,7 +7,11 @@ import pytest
 
 from backend.api.dependencies import get_scheduler, set_scheduler
 from backend.config import Settings, get_settings
-from backend.domain.constants import POLLING_INTERVAL_SECONDS, REBUILD_CRON_HOUR, REBUILD_CRON_MINUTE
+from backend.domain.constants import (
+    POLLING_INTERVAL_SECONDS,
+    REBUILD_CRON_HOUR,
+    REBUILD_CRON_MINUTE,
+)
 
 
 class TestSettingsWatcherConfig:

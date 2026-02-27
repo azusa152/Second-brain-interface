@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import UTC
 
 import pytest
 
@@ -22,7 +22,7 @@ class TestEventLogRecord:
         log.record(WatcherEvent(event_type="modified", file_path="note.md"))
 
         events = log.get_recent()
-        assert events[0].timestamp.tzinfo == timezone.utc
+        assert events[0].timestamp.tzinfo == UTC
 
     def test_record_should_preserve_dest_path_for_moves(self) -> None:
         log = EventLog()

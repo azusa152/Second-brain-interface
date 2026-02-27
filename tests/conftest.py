@@ -23,7 +23,6 @@ from backend.application.intent_service import IntentService
 from backend.application.search_service import SearchService
 from backend.main import app
 
-
 # ---------------------------------------------------------------------------
 # HTTP client
 # ---------------------------------------------------------------------------

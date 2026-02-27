@@ -3,7 +3,7 @@
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.domain.constants import EVENT_LOG_MAXLEN
 
@@ -14,7 +14,7 @@ class WatcherEvent:
 
     event_type: str  # "created", "modified", "deleted", "moved"
     file_path: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     dest_path: str | None = None
 
 

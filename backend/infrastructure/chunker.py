@@ -25,8 +25,8 @@ class Chunker:
         sections = self._split_by_headings(content)
         chunks: list[NoteChunk] = []
 
-        for heading_context, section_text in sections:
-            section_text = section_text.strip()
+        for heading_context, raw_section in sections:
+            section_text = raw_section.strip()
             if not section_text:
                 continue
 

@@ -61,7 +61,7 @@ class TestRebuildPerformance:
     def test_rebuild_100_notes_should_complete_under_30_seconds(
         self, perf_vault: str
     ) -> None:
-        service, mock_qdrant = _make_perf_service(perf_vault)
+        service, _mock_qdrant = _make_perf_service(perf_vault)
 
         start = time.time()
         result = service.rebuild_index()

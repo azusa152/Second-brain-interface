@@ -105,7 +105,7 @@ class TestFullPipeline:
 
     def test_index_single_note_then_search_should_work(self) -> None:
         """Index a single note, then search for it."""
-        index_svc, search_svc, mock_qdrant, mock_embedder = _setup_pipeline()
+        index_svc, _search_svc, mock_qdrant, _mock_embedder = _setup_pipeline()
 
         # Index a single note
         index_svc.index_single_note("note1.md")

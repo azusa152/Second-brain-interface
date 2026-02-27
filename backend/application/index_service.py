@@ -1,11 +1,11 @@
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.domain.constants import POLLING_INTERVAL_SECONDS, WATCH_EXTENSIONS
 from backend.domain.exceptions import RebuildInProgressError
-from backend.domain.models import IndexRebuildResponse, IndexStatus, IndexedNoteItem
+from backend.domain.models import IndexedNoteItem, IndexRebuildResponse, IndexStatus
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.debouncer import Debouncer
 from backend.infrastructure.embedding import EmbeddingService
@@ -132,7 +132,7 @@ class IndexService:
                 chunks_created += n_chunks
 
             elapsed = time.time() - start_time
-            self._last_indexed = datetime.now(tz=timezone.utc)
+            self._last_indexed = datetime.now(tz=UTC)
 
             logger.info(
                 "Rebuild complete: %d notes, %d chunks in %.1fs",
@@ -206,7 +206,7 @@ class IndexService:
                 deleted += 1
 
             self._hash_registry.save()
-            self._last_scheduled_rebuild = datetime.now(tz=timezone.utc)
+            self._last_scheduled_rebuild = datetime.now(tz=UTC)
             self._last_indexed = self._last_scheduled_rebuild
 
             elapsed = time.time() - start_time
@@ -298,7 +298,7 @@ class IndexService:
             return 0
 
         stat = os.stat(abs_path)
-        last_modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        last_modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
 
         metadata, links = self._parser.parse(rel_path, content, last_modified)
 
@@ -318,7 +318,7 @@ class IndexService:
         embeddings = self._embedder.embed_batch(texts)
         sparse_vectors = self._embedder.embed_batch_sparse(texts)
 
-        for chunk, embedding in zip(chunks, embeddings):
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
             chunk.embedding = embedding
 
         self._qdrant.bulk_upsert_chunks(chunks, sparse_vectors=sparse_vectors)

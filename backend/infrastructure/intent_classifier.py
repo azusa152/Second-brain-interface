@@ -27,7 +27,7 @@ _TEMPORAL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\blast\s+month\b", re.IGNORECASE),
     re.compile(r"\blast\s+week\b", re.IGNORECASE),
     re.compile(r"\bQ[1-4]\b"),
-    re.compile(r"\b20[2-3]\d\b"),       # 2020–2039
+    re.compile(r"\b20[2-3]\d\b"),       # 2020-2039
     re.compile(r"\byesterday\b", re.IGNORECASE),
     re.compile(r"\bthis\s+week\b", re.IGNORECASE),
     re.compile(r"\bthis\s+month\b", re.IGNORECASE),
@@ -53,14 +53,14 @@ _POLITENESS_PREFIX = re.compile(
 class ClassifierSignals:
     """Immutable raw signal scores from a single classify() call."""
 
-    rule_score: float              # 0.0–1.0 from keyword matching
-    semantic_score: float          # 0.0–1.0 from embedding cosine similarity
+    rule_score: float              # 0.0-1.0 from keyword matching
+    semantic_score: float          # 0.0-1.0 from embedding cosine similarity
     temporal_score: float          # 0.0 or 1.0 from temporal heuristic
     triggered: tuple[str, ...] = field(default_factory=tuple)  # Human-readable labels
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Return cosine similarity in [−1, 1]; returns 0.0 for zero-norm vectors."""
+    """Return cosine similarity in [-1, 1]; returns 0.0 for zero-norm vectors."""
     va = np.array(a, dtype=np.float32)
     vb = np.array(b, dtype=np.float32)
     norm_a = float(np.linalg.norm(va))

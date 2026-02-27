@@ -15,8 +15,8 @@ from watchdog.observers import Observer
 from watchdog.observers.polling import PollingObserver
 
 from backend.domain.constants import (
-    POLLING_INTERVAL_SECONDS,
     POLLING_INTERVAL_MIN_SECONDS,
+    POLLING_INTERVAL_SECONDS,
     WATCH_EXTENSIONS,
 )
 from backend.logging_config import get_logger

@@ -47,7 +47,7 @@ class TestHeadingSplitting:
         chunks = chunker.chunk("test.md", content)
 
         # Find the chunk with "Bottom text"
-        bottom_chunk = [c for c in chunks if "Bottom text" in c.content][0]
+        bottom_chunk = next(c for c in chunks if "Bottom text" in c.content)
         assert bottom_chunk.heading_context == "Top > Middle > Bottom"
 
     def test_chunk_should_handle_content_before_first_heading(self) -> None:
@@ -66,10 +66,10 @@ class TestHeadingSplitting:
 
         chunks = chunker.chunk("test.md", content)
 
-        a1_chunk = [c for c in chunks if "Text A1" in c.content][0]
+        a1_chunk = next(c for c in chunks if "Text A1" in c.content)
         assert a1_chunk.heading_context == "A > A1"
 
-        b_chunk = [c for c in chunks if "Text B" in c.content][0]
+        b_chunk = next(c for c in chunks if "Text B" in c.content)
         assert b_chunk.heading_context == "B"
 
 

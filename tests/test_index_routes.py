@@ -1,6 +1,6 @@
 """Tests for GET /index/events and GET /index/notes endpoints."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
@@ -13,7 +13,7 @@ class TestGetWatcherEvents:
     def test_events_should_return_200_with_events(
         self, client: TestClient, mock_index_service: MagicMock
     ) -> None:
-        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
         mock_index_service.get_recent_events.return_value = [
             WatcherEvent(event_type="modified", file_path="note.md", timestamp=ts),
             WatcherEvent(event_type="created", file_path="new.md", timestamp=ts),
@@ -75,7 +75,7 @@ class TestGetWatcherEvents:
     def test_events_should_include_dest_path_for_moved_events(
         self, client: TestClient, mock_index_service: MagicMock
     ) -> None:
-        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
         mock_index_service.get_recent_events.return_value = [
             WatcherEvent(
                 event_type="moved",
@@ -93,7 +93,7 @@ class TestGetWatcherEvents:
     def test_events_should_have_null_dest_path_for_non_move_events(
         self, client: TestClient, mock_index_service: MagicMock
     ) -> None:
-        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
         mock_index_service.get_recent_events.return_value = [
             WatcherEvent(event_type="deleted", file_path="gone.md", timestamp=ts),
         ]

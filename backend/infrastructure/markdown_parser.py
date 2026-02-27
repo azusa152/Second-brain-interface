@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import yaml
 
@@ -37,7 +37,7 @@ class MarkdownParser:
         word_count = len(clean_text.split())
 
         if last_modified is None:
-            last_modified = datetime.now(tz=timezone.utc)
+            last_modified = datetime.now(tz=UTC)
 
         metadata = NoteMetadata(
             file_path=file_path,
