@@ -107,6 +107,7 @@ Run `make help` to see this list at any time.
 | `GET` | `/health` | Service health check |
 | `POST` | `/augment` | **Recommended** — classify intent, retrieve context, return augmented prompt |
 | `POST` | `/search` | Semantic + keyword hybrid search (raw results) |
+| `POST` | `/note/suggest-links` | Suggest wikilinks and tags for draft note content |
 | `POST` | `/intent/classify` | Standalone intent classification |
 | `POST` | `/index/rebuild` | Trigger full vault re-index |
 | `GET` | `/index/status` | Index health and statistics |
@@ -168,7 +169,8 @@ Response:
       "content": "We decided to use Flyway for database migrations because...",
       "score": 0.87,
       "heading_context": "Decision",
-      "highlights": []
+      "highlights": [],
+      "tags": ["#architecture", "#decision"]
     }
   ],
   "related_notes": [],
@@ -197,6 +199,31 @@ Response:
 
 ```bash
 curl http://localhost:8000/index/status
+```
+
+### Get wikilink suggestions for a draft note
+
+```bash
+curl -X POST http://localhost:8000/note/suggest-links \
+  -H 'Content-Type: application/json' \
+  -d '{"content": "Today I decided to use Flyway for database migrations...", "title": "Migration Strategy Decision"}'
+```
+
+Response:
+```json
+{
+  "suggested_wikilinks": [
+    {
+      "display_text": "ADR-005: Database Migration Strategy",
+      "target_path": "notes/adr-005.md",
+      "score": 0.87
+    }
+  ],
+  "suggested_tags": ["#architecture", "#decision"],
+  "related_notes": [
+    {"note_path": "concepts/flyway.md", "note_title": "flyway"}
+  ]
+}
 ```
 
 ### Get note links
@@ -229,6 +256,88 @@ The API enables CORS for all origins (`*`), allowing the built-in `/dashboard`
 and any local LLM agent running in a browser context to call the API directly.
 
 For full agent integration documentation, see [docs/agents/SKILL.md](docs/agents/SKILL.md).
+For the complete API reference (all endpoints, full schemas), see [docs/agents/API_REFERENCE.md](docs/agents/API_REFERENCE.md).
+
+## Note Creation (Agent Workflow)
+
+The service is read-only and never writes to the vault. Agents (such as OpenClaw) write notes directly to the vault directory. The file watcher automatically detects and indexes new `.md` files within 5 seconds.
+
+**Recommended workflow for agents creating notes:**
+
+1. Draft the note content
+2. Call `POST /note/suggest-links` with the draft content and title to get wikilink and tag suggestions
+3. Write the `.md` file to the vault directory with the suggested links and frontmatter
+4. The service indexes the note automatically — no manual step required
+
+Use this frontmatter template for agent-created notes:
+
+```yaml
+---
+title: "{title}"
+date: "{YYYY-MM-DD}"
+tags: [{suggested_tags}]
+created_by: openclaw
+---
+```
+
+The `created_by: openclaw` field lets you distinguish agent-created notes from manually written ones.
+
+## OpenClaw Integration
+
+Add the following to your OpenClaw memory or persona instructions to enable proactive note creation in your Obsidian vault.
+
+Replace `{VAULT_PATH}` with your vault path (e.g., `~/obsidian-vault`).
+
+---
+
+**Obsidian Vault Access**
+
+You can read from and write to the user's Obsidian vault at `{VAULT_PATH}`.
+A knowledge bridge service at `http://localhost:8000` indexes the vault for
+semantic search. Install the `obsidian-knowledge-bridge` skill from
+`docs/agents/SKILL.md` to use it.
+
+**Reading (automatic):** Use the `obsidian-knowledge-bridge` skill. The
+`POST /augment` endpoint classifies intent and retrieves context automatically.
+
+**Writing notes:** When you encounter information worth preserving, create a
+note in the vault. Do not ask for permission each time — use your judgment.
+
+Worth preserving:
+- Decisions made and their reasoning
+- Key insights or discoveries
+- Meeting summaries and action items
+- Useful references or comparisons
+- Project plans or architecture decisions
+
+Not worth preserving:
+- Trivial questions or small talk
+- Information already in existing notes
+- Temporary or ephemeral context
+
+Steps to create a note:
+1. Draft the content in markdown
+2. Call `POST http://localhost:8000/note/suggest-links` with
+   `{"content": "...", "title": "..."}` to get wikilink and tag suggestions
+3. Write the `.md` file to `{VAULT_PATH}/inbox/` (or a more specific folder
+   if obvious) using this frontmatter template:
+
+```yaml
+---
+title: "{title}"
+date: "{YYYY-MM-DD}"
+tags: [{suggested_tags}]
+created_by: openclaw
+---
+```
+
+4. Incorporate the suggested `[[wikilinks]]` into the note body where relevant
+5. The service auto-indexes new notes within 5 seconds
+
+If `POST /note/suggest-links` returns 503, write the note without suggestions —
+it will still be indexed and searchable.
+
+---
 
 ## Upgrading
 
@@ -259,5 +368,9 @@ backend/
 └── api/             # FastAPI route handlers
 frontend/            # Monitoring dashboard (static HTML/CSS/JS)
 ```
+
+**Read flow:** Agent → `POST /augment` → intent classify → hybrid search (dense + sparse RRF) → graph enrichment → augmented prompt
+
+**Write flow:** Agent → `POST /note/suggest-links` → hybrid search → suggested links/tags → agent writes `.md` to vault → file watcher detects → auto-indexed within 5 seconds
 
 See [docs/design.md](docs/design.md) for the full technical design.

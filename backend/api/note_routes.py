@@ -5,9 +5,50 @@ from fastapi.responses import JSONResponse
 
 from backend.api.dependencies import get_search_service
 from backend.application.search_service import SearchService
-from backend.domain.models import NoteLinkItem, NoteLinksResponse
+from backend.domain.models import (
+    NoteLinkItem,
+    NoteLinksResponse,
+    SuggestLinksRequest,
+    SuggestLinksResponse,
+)
+from backend.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/note", tags=["note"])
+
+
+@router.post(
+    "/suggest-links",
+    response_model=SuggestLinksResponse,
+    summary="Suggest wikilinks and tags for draft note content",
+    responses={
+        503: {"description": "Search service or embedding model not ready"},
+    },
+)
+def suggest_links(
+    request: SuggestLinksRequest,
+    service: Annotated[SearchService, Depends(get_search_service)],
+) -> SuggestLinksResponse | JSONResponse:
+    """Analyze draft note content and return suggested wikilinks, tags, and related notes.
+
+    Extracts a focused query from the title and first meaningful sentences
+    (respecting the embedding model's token limit), runs hybrid search over
+    the indexed vault, and returns deduplicated suggestions ready to incorporate
+    into a new Obsidian note.
+    """
+    try:
+        return service.suggest_links(request)
+    except Exception:
+        logger.exception("suggest_links failed for title: %.80s", request.title or "(no title)")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error_code": "SUGGEST_LINKS_UNAVAILABLE",
+                "message": "Suggest links service is temporarily unavailable. "
+                "Ensure the index has been built.",
+            },
+        )
 
 
 @router.get(

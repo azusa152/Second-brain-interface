@@ -3,8 +3,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from backend.domain.constants import AUGMENT_TOP_K_DEFAULT, MAX_TOP_K, TOP_K_DEFAULT
-
+from backend.domain.constants import (
+    AUGMENT_TOP_K_DEFAULT,
+    MAX_TOP_K,
+    SUGGEST_LINKS_MAX_SUGGESTIONS_DEFAULT,
+    TOP_K_DEFAULT,
+)
 
 # --- Core Entities ---
 
@@ -65,6 +69,7 @@ class SearchResultItem(BaseModel):
     score: float
     heading_context: str | None = None
     highlights: list[str] = []
+    tags: list[str] = []
 
 
 class RelatedNote(BaseModel):
@@ -178,6 +183,38 @@ class IndexedNotesResponse(BaseModel):
 
     notes: list[IndexedNoteItem]
     total: int
+
+
+# --- Suggest Links ---
+
+
+class SuggestLinksRequest(BaseModel):
+    """Request body for POST /note/suggest-links."""
+
+    content: str = Field(min_length=1, description="Draft note content in markdown")
+    title: str | None = Field(None, description="Optional note title for better semantic matching")
+    max_suggestions: int = Field(
+        default=SUGGEST_LINKS_MAX_SUGGESTIONS_DEFAULT,
+        ge=1,
+        le=MAX_TOP_K,
+        description="Maximum number of wikilink suggestions to return",
+    )
+
+
+class SuggestedLink(BaseModel):
+    """A single wikilink suggestion for a draft note."""
+
+    display_text: str = Field(description="Note title to use as [[wikilink]] text")
+    target_path: str = Field(description="Vault-relative path of the suggested note")
+    score: float = Field(description="Relevance score from hybrid search (0-1)")
+
+
+class SuggestLinksResponse(BaseModel):
+    """Response from POST /note/suggest-links."""
+
+    suggested_wikilinks: list[SuggestedLink]
+    suggested_tags: list[str]
+    related_notes: list[NoteLinkItem]
 
 
 # --- Intent Classification ---

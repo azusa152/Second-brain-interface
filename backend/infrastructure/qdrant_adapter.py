@@ -13,9 +13,11 @@ from qdrant_client.models import (
     MatchValue,
     PointStruct,
     Prefetch,
-    SparseVector as QdrantSparseVector,
     SparseVectorParams,
     VectorParams,
+)
+from qdrant_client.models import (
+    SparseVector as QdrantSparseVector,
 )
 
 from backend.domain.constants import (
@@ -332,6 +334,7 @@ class QdrantAdapter:
                     content=payload.get("content", ""),
                     score=point.score if point.score is not None else 0.0,
                     heading_context=payload.get("heading_context"),
+                    tags=payload.get("tags") or [],
                 )
             )
 

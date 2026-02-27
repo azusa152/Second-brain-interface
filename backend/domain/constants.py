@@ -24,7 +24,7 @@ INTENT_RULE_WEIGHT = 0.4            # Weight for keyword signal
 INTENT_SEMANTIC_WEIGHT = 0.4        # Weight for embedding similarity signal
 INTENT_TEMPORAL_WEIGHT = 0.2        # Weight for temporal heuristic signal
 # Min cosine similarity for semantic signal to contribute (all-MiniLM-L6-v2 scores are lower
-# than intuition suggests; most semantically-similar pairs fall in the 0.3–0.7 range)
+# than intuition suggests; most semantically-similar pairs fall in the 0.3-0.7 range)
 INTENT_SEMANTIC_SIMILARITY_MIN = 0.3
 
 # Default personal-domain keywords. All matching uses word boundaries (\b) to avoid false
@@ -49,6 +49,10 @@ INTENT_DEFAULT_DOMAIN_ANCHORS: list[str] = [
     "technical decisions architecture choices made in the past",
     "goals and personal objectives review",
 ]
+
+# Suggest Links
+SUGGEST_LINKS_MAX_SUGGESTIONS_DEFAULT = 5  # Default max wikilink suggestions
+SUGGEST_LINKS_QUERY_MAX_CHARS = 400        # Max chars extracted from content for embedding query
 
 # Context Augmentation
 # Default top-k for augment is lower than search to stay within the LLM context budget

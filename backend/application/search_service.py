@@ -1,12 +1,16 @@
 import time
 from collections import Counter
 
-from backend.domain.constants import SIMILARITY_THRESHOLD
+from backend.domain.constants import SIMILARITY_THRESHOLD, SUGGEST_LINKS_QUERY_MAX_CHARS
 from backend.domain.models import (
+    NoteLinkItem,
     RelatedNote,
     SearchRequest,
     SearchResponse,
     SearchResultItem,
+    SuggestedLink,
+    SuggestLinksRequest,
+    SuggestLinksResponse,
 )
 from backend.infrastructure.embedding import EmbeddingService
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
@@ -82,7 +86,7 @@ class SearchService:
         # Aggregate: count links per (related_path, relationship), excluding self-links
         # and paths already in the search results
         counter: Counter[tuple[str, str]] = Counter()
-        for note_path, link_list in relations.items():
+        for _note_path, link_list in relations.items():
             for link in link_list:
                 related_path = link["related_path"]
                 relationship = link["relationship"]
@@ -113,3 +117,122 @@ class SearchService:
     def is_note_indexed(self, note_path: str) -> bool:
         """Check if a note exists in the index."""
         return self._qdrant.is_note_indexed(note_path)
+
+    def suggest_links(self, request: SuggestLinksRequest) -> SuggestLinksResponse:
+        """Suggest wikilinks and tags for draft note content.
+
+        Extracts a focused query from the draft title and first meaningful
+        sentences (respecting the embedding model's input limit), runs hybrid
+        search, deduplicates results by note path, and aggregates tags by
+        frequency across matched chunks.
+        """
+        query = self._extract_query_from_content(request.content, request.title)
+
+        # Over-fetch to ensure enough unique notes after deduplication.
+        # Fetch at least 20 chunks to handle vaults where many chunks come from
+        # the same few notes.
+        fetch_k = max(request.max_suggestions * 3, 20)
+        query_vector = self._embedder.embed_text(query)
+        sparse_vector = self._embedder.embed_text_sparse(query)
+
+        raw_results = self._qdrant.hybrid_search(
+            query_vector=query_vector,
+            sparse_vector=sparse_vector,
+            top_k=fetch_k,
+        )
+
+        # Deduplicate by note_path: keep highest-score chunk per note
+        seen_paths: dict[str, SearchResultItem] = {}
+        for item in raw_results:
+            if item.note_path not in seen_paths or item.score > seen_paths[item.note_path].score:
+                seen_paths[item.note_path] = item
+
+        # Build suggested wikilinks from top-scoring deduplicated notes
+        top_results = sorted(seen_paths.values(), key=lambda r: r.score, reverse=True)
+        top_results = top_results[: request.max_suggestions]
+
+        suggested_wikilinks = [
+            SuggestedLink(
+                display_text=item.note_title,
+                target_path=item.note_path,
+                score=round(item.score, 4),
+            )
+            for item in top_results
+        ]
+
+        # Collect tags only from the notes that are actually being suggested,
+        # so tag recommendations are coherent with the wikilink suggestions.
+        tag_counter: Counter[str] = Counter()
+        for item in top_results:
+            tag_counter.update(item.tags)
+        suggested_tags = [tag for tag, _ in tag_counter.most_common()]
+
+        # Build related notes from graph enrichment (exclude the suggestions themselves)
+        suggestion_paths = {item.note_path for item in top_results}
+        related_notes: list[NoteLinkItem] = []
+        if top_results:
+            relations = self._qdrant.get_related_notes_batch(suggestion_paths)
+            seen_related: set[str] = set()
+            for link_list in relations.values():
+                for link in link_list:
+                    related_path = link["related_path"]
+                    if related_path not in suggestion_paths and related_path not in seen_related:
+                        seen_related.add(related_path)
+                        title = related_path.rsplit("/", 1)[-1].removesuffix(".md")
+                        related_notes.append(
+                            NoteLinkItem(note_path=related_path, note_title=title)
+                        )
+
+        logger.info(
+            "suggest_links query='%s': %d wikilinks, %d tags, %d related",
+            query[:60],
+            len(suggested_wikilinks),
+            len(suggested_tags),
+            len(related_notes),
+        )
+
+        return SuggestLinksResponse(
+            suggested_wikilinks=suggested_wikilinks,
+            suggested_tags=suggested_tags,
+            related_notes=related_notes,
+        )
+
+    @staticmethod
+    def _extract_query_from_content(content: str, title: str | None) -> str:
+        """Extract a focused query string from draft note content.
+
+        Skips YAML frontmatter and heading lines, then concatenates the first
+        non-empty lines up to SUGGEST_LINKS_QUERY_MAX_CHARS. This keeps the
+        input within all-MiniLM-L6-v2's effective range (~256 tokens / 512 chars).
+        Falls back to a direct truncation if no meaningful body lines are found.
+        """
+        lines = content.strip().splitlines()
+
+        # Skip YAML frontmatter block
+        if lines and lines[0].strip() == "---":
+            for i, line in enumerate(lines[1:], 1):
+                if line.strip() == "---":
+                    lines = lines[i + 1 :]
+                    break
+
+        # Collect first non-empty, non-heading lines up to the char budget.
+        # Track the joined length (including separating spaces) so the early-exit
+        # condition matches what " ".join() actually produces.
+        body_parts: list[str] = []
+        joined_len = 0
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            # Account for the space separator between parts
+            added = len(stripped) + (1 if body_parts else 0)
+            if joined_len + added > SUGGEST_LINKS_QUERY_MAX_CHARS:
+                break
+            body_parts.append(stripped)
+            joined_len += added
+
+        body = " ".join(body_parts)
+
+        if title:
+            return f"{title}. {body}" if body else title
+        return body or content[:SUGGEST_LINKS_QUERY_MAX_CHARS]
