@@ -1,0 +1,19 @@
+# Development overrides — auto-loaded by `docker compose up` alongside docker-compose.yml.
+# Mounts source code into the container and enables uvicorn hot reload.
+# Copy this file to docker-compose.override.yml (gitignored) to enable hot reload:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+services:
+  backend:
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+    command:
+      - uvicorn
+      - backend.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/backend

@@ -20,6 +20,7 @@ tests/fixtures/perf_vault/
 
 # Linting
 .ruff_cache/
+.mypy_cache/
 
 # IDE
 .vscode/
@@ -33,3 +34,7 @@ tests/fixtures/perf_vault/
 # OS
 .DS_Store
 Thumbs.db
+
+# Docker
+# Local dev override — copy docker-compose.override.yml.example to create
+docker-compose.override.yml

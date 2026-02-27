@@ -25,6 +25,20 @@ open http://localhost:6333/dashboard
 make down
 ```
 
+## Docker Hot Reload (Optional)
+
+For faster iteration when working on backend code inside Docker, copy the provided
+override template and restart:
+
+```bash
+cp docker-compose.override.yml.example docker-compose.override.yml
+make restart
+```
+
+`docker-compose.override.yml` is gitignored (personal dev config). It mounts
+`backend/` and `frontend/` as live volumes and adds uvicorn `--reload` so code
+changes take effect without rebuilding the image.
+
 ## Dashboard
 
 A built-in monitoring dashboard is available at:
@@ -70,35 +84,67 @@ make restart
 ## Local Development
 
 ```bash
-# Create virtual environment
-python3 -m venv .venv
+# One-step setup: creates .venv, installs all dev dependencies via uv,
+# and installs pre-commit hooks (runs ruff + mypy on every commit)
+make setup
+
+# Activate the virtual environment
 source .venv/bin/activate
 
-# Install runtime + development/testing dependencies
-pip install -r requirements-dev.txt
+# Run the FastAPI server locally with hot reload
+# Requires Qdrant running (e.g. via `make up`) or QDRANT_URL env var
+make dev
 
 # Run tests with coverage
 make test
 
-# Lint and format
-make lint
-make format
+# Lint, format, type-check individually
+make lint          # ruff check (no auto-fix)
+make format        # ruff format + ruff check --fix
+make typecheck     # mypy backend/
+
+# Full CI gate locally (mirrors all CI checks)
+make check
+```
+
+**Why uv?** `uv` is a Rust-based package manager from the Astral team (same authors as ruff). It replaces `pip` for 10-100x faster installs and is used in both `make setup` and CI.
+
+**Pre-commit hooks** run automatically on `git commit` and enforce ruff lint, ruff format, and mypy. To run them manually on all files:
+
+```bash
+.venv/bin/pre-commit run --all-files
 ```
 
 ## Makefile Targets
+
+Run `make help` to see this list at any time.
+
+### Docker
 
 | Target | Description |
 |--------|-------------|
 | `make up` | Start all services (backend + Qdrant), rebuilding images |
 | `make down` | Stop all services |
 | `make restart` | Stop, rebuild, and restart all services |
-| `make logs` | Tail logs from all running services |
 | `make build` | Build Docker images without starting |
-| `make test` | Run test suite |
-| `make lint` | Run linter checks |
-| `make format` | Auto-format and fix code |
+| `make logs` | Tail logs from all running services |
+| `make status` | Show running container status |
+| `make shell` | Open a bash shell in the backend container |
+| `make clean` | Stop services, remove volumes, purge caches |
 
-Run `make help` to see this list at any time.
+### Development
+
+| Target | Description |
+|--------|-------------|
+| `make setup` | Create `.venv`, install dev deps via `uv`, install pre-commit hooks |
+| `make dev` | Run FastAPI locally with hot reload (`--reload`) |
+| `make test` | Run test suite with coverage |
+| `make lint` | Ruff lint check (no auto-fix) |
+| `make format` | Auto-format and apply safe lint fixes |
+| `make format-check` | Check formatting without modifying files (matches CI) |
+| `make typecheck` | Run mypy static type checks |
+| `make audit` | Run `pip-audit` security scan on runtime deps |
+| `make check` | Full CI gate: lint + format-check + typecheck + tests |
 
 ## API Endpoints
 

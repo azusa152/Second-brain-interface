@@ -3,12 +3,16 @@
 # Usage: make <target>   |   Run `make` or `make help` to list all targets
 # ============================================================================ #
 
-COMPOSE  := docker compose
-VENV_BIN := .venv/bin
-PYTHON   := $(VENV_BIN)/python
-RUFF     := $(VENV_BIN)/ruff
-PYTEST   := $(VENV_BIN)/pytest
-SRC_DIRS := backend/ tests/
+COMPOSE       := docker compose
+VENV_BIN      := .venv/bin
+PYTHON        := $(VENV_BIN)/python
+UV            := $(VENV_BIN)/uv
+RUFF          := $(VENV_BIN)/ruff
+PYTEST        := $(VENV_BIN)/pytest
+MYPY          := $(VENV_BIN)/mypy
+PIP_AUDIT     := $(VENV_BIN)/pip-audit
+PRE_COMMIT    := $(VENV_BIN)/pre-commit
+SRC_DIRS      := backend/ tests/
 
 # Guard used by dev targets that require the venv to exist
 _require_venv:
@@ -69,6 +73,7 @@ clean: ## Stop services, remove volumes, and purge Python caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .ruff_cache  -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .mypy_cache  -exec rm -rf {} + 2>/dev/null || true
 
 # ---------------------------------------------------------------------------- #
 # Development                                                                   #
@@ -76,13 +81,17 @@ clean: ## Stop services, remove volumes, and purge Python caches
 
 ##@ Development
 
-.PHONY: setup test lint format check _require_venv
+.PHONY: setup dev test lint format format-check typecheck audit check _require_venv
 
-setup: ## Create .venv and install all dependencies
+setup: ## Create .venv, install all dev dependencies, and install pre-commit hooks
 	python3 -m venv .venv
-	$(PYTHON) -m pip install --upgrade pip
-	$(PYTHON) -m pip install -r requirements.txt
-	$(PYTHON) -m pip install ruff pytest pytest-cov pytest-asyncio
+	$(PYTHON) -m pip install --upgrade pip uv
+	$(UV) pip install -r requirements-dev.txt
+	$(PRE_COMMIT) install
+	@printf "\nSetup complete. Run 'make check' to verify everything works.\n"
+
+dev: _require_venv ## Run FastAPI server locally with hot reload (requires Qdrant on localhost:6333)
+	OBSIDIAN_VAULT_PATH=./_vault QDRANT_URL=http://localhost:6333 $(PYTHON) -m uvicorn backend.main:app --reload --port 8000
 
 test: _require_venv ## Run test suite with coverage
 	$(PYTEST) tests/ -v --cov=backend --cov-report=term-missing
@@ -94,6 +103,17 @@ format: _require_venv ## Auto-format and apply safe lint fixes
 	$(RUFF) format $(SRC_DIRS)
 	$(RUFF) check --fix $(SRC_DIRS)
 
-check: _require_venv ## Run lint then tests — single CI gate
+format-check: _require_venv ## Check formatting without modifying files (matches CI)
+	$(RUFF) format --check $(SRC_DIRS)
+
+typecheck: _require_venv ## Run static type checks with mypy
+	$(MYPY) backend/
+
+audit: _require_venv ## Run security audit on runtime dependencies
+	$(PIP_AUDIT) --desc -r requirements.txt --ignore-vuln CVE-2026-25990
+
+check: _require_venv ## Full CI gate: lint + format-check + typecheck + tests (run 'make audit' separately)
 	$(RUFF) check $(SRC_DIRS)
+	$(RUFF) format --check $(SRC_DIRS)
+	$(MYPY) backend/
 	$(PYTEST) tests/ -v --cov=backend --cov-report=term-missing

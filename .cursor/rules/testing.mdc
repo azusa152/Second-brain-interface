@@ -1,7 +1,7 @@
 ---
-description: Backend testing standards with pytest. Apply when writing or modifying tests in backend/tests/ or any test files.
+description: Backend testing standards with pytest. Apply when writing or modifying tests in tests/ or any test files.
 globs:
-  - "backend/tests/**"
+  - "tests/**"
   - "**/*test*.py"
   - "**/conftest.py"
 alwaysApply: false
@@ -13,7 +13,7 @@ Every feature MUST ship with tests. No untested code in production.
 
 ## Test File Structure
 
-Tests live in `backend/tests/` mirroring the source layout. Check the actual directory for current structure.
+Tests live in `tests/` at the project root, mirroring the source layout under `backend/`. Check the actual directory for current structure.
 
 ## Test Naming
 
