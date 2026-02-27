@@ -8,5 +8,7 @@ watchdog==4.0.2
 apscheduler==3.10.4
 pyyaml==6.0.3
 markdown-it-py==3.0.0
-# Transitive dep of fastembed; pinned to patch CVE-2026-25990 (out-of-bounds write in PSD loader)
-pillow==12.1.1
+# Transitive dep of fastembed; pinned to highest 11.x for reproducibility.
+# CVE-2026-25990 (PSD loader) fix requires >=12.1.1 but fastembed==0.7.4 caps pillow<12.0.
+# Suppressed in pip-audit — this project processes only Markdown, not PSD images.
+pillow==11.3.0
