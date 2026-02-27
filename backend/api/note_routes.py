@@ -1,6 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 
 from backend.api.dependencies import get_search_service
+from backend.application.search_service import SearchService
 from backend.domain.models import NoteLinkItem, NoteLinksResponse
 
 router = APIRouter(prefix="/note", tags=["note"])
@@ -12,16 +16,17 @@ router = APIRouter(prefix="/note", tags=["note"])
     summary="Get backlinks and outgoing links for a note",
     responses={404: {"description": "Note not found in index"}},
 )
-def get_note_links(note_path: str) -> NoteLinksResponse:
-    """Return the link neighborhood (backlinks + outlinks) for a specific note."""
-    service = get_search_service()
-
+def get_note_links(
+    note_path: str,
+    service: Annotated[SearchService, Depends(get_search_service)],
+) -> NoteLinksResponse | JSONResponse:
+    """Return the link neighbourhood (backlinks + outlinks) for a specific note."""
     if not service.is_note_indexed(note_path):
-        raise HTTPException(
+        return JSONResponse(
             status_code=404,
-            detail={
+            content={
                 "error_code": "NOTE_NOT_FOUND",
-                "detail": f"Note not found in index: {note_path}",
+                "message": f"Note not found in index: {note_path}",
             },
         )
 

@@ -2,26 +2,7 @@
 
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
-
-from backend.api.dependencies import set_search_service
-from backend.application.search_service import SearchService
-from backend.main import app
-
-
-@pytest.fixture()
-def mock_search_service() -> MagicMock:
-    """Create and inject a mock SearchService."""
-    mock = MagicMock(spec=SearchService)
-    set_search_service(mock)
-    yield mock
-    set_search_service(None)  # type: ignore[arg-type]
-
-
-@pytest.fixture()
-def client() -> TestClient:
-    return TestClient(app)
 
 
 class TestGetNoteLinksEndpoint:
@@ -99,7 +80,7 @@ class TestGetNoteLinksEndpoint:
 
         assert resp.status_code == 404
         body = resp.json()
-        assert body["detail"]["error_code"] == "NOTE_NOT_FOUND"
+        assert body["error_code"] == "NOTE_NOT_FOUND"
 
     def test_get_note_links_response_should_not_include_relationship_field(
         self, client: TestClient, mock_search_service: MagicMock

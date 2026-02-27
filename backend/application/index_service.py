@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timezone
 
 from backend.domain.constants import POLLING_INTERVAL_SECONDS, WATCH_EXTENSIONS
+from backend.domain.exceptions import RebuildInProgressError
 from backend.domain.models import IndexRebuildResponse, IndexStatus, IndexedNoteItem
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.debouncer import Debouncer
@@ -102,10 +103,14 @@ class IndexService:
         )
         self.rename_note(old_path, new_path)
 
-    def rebuild_index(self) -> IndexRebuildResponse | None:
-        """Full re-index of all .md files in vault. Returns None if already running."""
+    def rebuild_index(self) -> IndexRebuildResponse:
+        """Full re-index of all .md files in vault.
+
+        Raises:
+            RebuildInProgressError: if a rebuild is already running.
+        """
         if not self._rebuild_lock.acquire(blocking=False):
-            return None
+            raise RebuildInProgressError("A re-index operation is already running.")
 
         start_time = time.time()
         notes_indexed = 0

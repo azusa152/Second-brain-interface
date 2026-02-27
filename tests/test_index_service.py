@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.application.index_service import IndexService
+from backend.domain.exceptions import RebuildInProgressError
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.event_log import EventLog
 from backend.infrastructure.hash_registry import HashRegistry
@@ -64,23 +65,16 @@ class TestRebuildIndex:
         assert result.chunks_created > 0
         assert mock_qdrant.bulk_upsert_chunks.called
 
-    def test_rebuild_should_return_error_if_already_running(self) -> None:
-        service, _, mock_embedder = _make_service()
-        mock_embedder.embed_batch.side_effect = lambda texts: [
-            [0.0] * 384 for _ in texts
-        ]
-        mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
-            MagicMock(indices=[1], values=[0.5]) for _ in texts
-        ]
+    def test_rebuild_should_raise_if_already_running(self) -> None:
+        service, _, _ = _make_service()
 
         # Simulate concurrent rebuild by holding the lock
         service._rebuild_lock.acquire()
         try:
-            result = service.rebuild_index()
+            with pytest.raises(RebuildInProgressError):
+                service.rebuild_index()
         finally:
             service._rebuild_lock.release()
-
-        assert result is None
 
 
 def _make_service_with_registry(

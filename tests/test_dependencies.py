@@ -1,51 +1,43 @@
-"""Tests for environment variable parsing in backend.api.dependencies."""
+"""Tests for settings parsing in backend.config and scheduler wiring in backend.api.dependencies."""
 
 import os
 from unittest.mock import patch
 
 import pytest
 
-from backend.api.dependencies import _parse_watcher_config, get_scheduler, set_scheduler
+from backend.api.dependencies import get_scheduler, set_scheduler
+from backend.config import Settings, get_settings
 from backend.domain.constants import POLLING_INTERVAL_SECONDS, REBUILD_CRON_HOUR, REBUILD_CRON_MINUTE
 
 
-class TestParseWatcherConfig:
-    def test_defaults_when_env_vars_unset(self) -> None:
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("USE_POLLING_OBSERVER", None)
-            os.environ.pop("POLLING_INTERVAL_SECONDS", None)
+class TestSettingsWatcherConfig:
+    """Tests for USE_POLLING_OBSERVER and POLLING_INTERVAL_SECONDS via Settings."""
 
-            use_polling, polling_interval = _parse_watcher_config()
+    def test_defaults_are_applied(self) -> None:
+        # Pass _env_file=None so the local .env file is not loaded; pure defaults only.
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.use_polling_observer is False
+        assert settings.polling_interval_seconds == POLLING_INTERVAL_SECONDS
 
-        assert use_polling is False
-        assert polling_interval == POLLING_INTERVAL_SECONDS
+    def test_use_polling_observer_can_be_set_to_true(self) -> None:
+        settings = Settings(_env_file=None, use_polling_observer=True)  # type: ignore[call-arg]
+        assert settings.use_polling_observer is True
 
-    @pytest.mark.parametrize("value", ["true", "True", "TRUE"])
-    def test_use_polling_is_true_for_truthy_values(self, value: str) -> None:
+    def test_polling_interval_accepts_float(self) -> None:
+        settings = Settings(_env_file=None, polling_interval_seconds=7.5)  # type: ignore[call-arg]
+        assert settings.polling_interval_seconds == pytest.approx(7.5)
+
+    @pytest.mark.parametrize("value", ["true", "True", "TRUE", "1"])
+    def test_use_polling_parsed_from_env_truthy(self, value: str) -> None:
         with patch.dict(os.environ, {"USE_POLLING_OBSERVER": value}):
-            use_polling, _ = _parse_watcher_config()
-        assert use_polling is True
+            settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.use_polling_observer is True
 
-    @pytest.mark.parametrize("value", ["false", "False", "FALSE", "0", ""])
-    def test_use_polling_is_false_for_non_true_values(self, value: str) -> None:
+    @pytest.mark.parametrize("value", ["false", "False", "FALSE", "0"])
+    def test_use_polling_parsed_from_env_falsy(self, value: str) -> None:
         with patch.dict(os.environ, {"USE_POLLING_OBSERVER": value}):
-            use_polling, _ = _parse_watcher_config()
-        assert use_polling is False
-
-    def test_valid_polling_interval_is_parsed(self) -> None:
-        with patch.dict(os.environ, {"POLLING_INTERVAL_SECONDS": "7.5"}):
-            _, polling_interval = _parse_watcher_config()
-        assert polling_interval == pytest.approx(7.5)
-
-    def test_invalid_polling_interval_falls_back_to_default(self) -> None:
-        with patch.dict(os.environ, {"POLLING_INTERVAL_SECONDS": "not-a-number"}):
-            _, polling_interval = _parse_watcher_config()
-        assert polling_interval == POLLING_INTERVAL_SECONDS
-
-    def test_empty_polling_interval_falls_back_to_default(self) -> None:
-        with patch.dict(os.environ, {"POLLING_INTERVAL_SECONDS": ""}):
-            _, polling_interval = _parse_watcher_config()
-        assert polling_interval == POLLING_INTERVAL_SECONDS
+            settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.use_polling_observer is False
 
 
 class TestGetScheduler:
@@ -54,10 +46,12 @@ class TestGetScheduler:
     def setup_method(self) -> None:
         """Reset the scheduler singleton before each test."""
         set_scheduler(None)
+        get_settings.cache_clear()
 
     def teardown_method(self) -> None:
         """Reset the scheduler singleton after each test."""
         set_scheduler(None)
+        get_settings.cache_clear()
 
     def test_returns_none_when_disabled(self) -> None:
         with patch.dict(os.environ, {"SCHEDULED_REBUILD_ENABLED": "false"}):
@@ -74,11 +68,11 @@ class TestGetScheduler:
         """get_scheduler() should return None on subsequent calls without re-reading env var."""
         with patch.dict(os.environ, {"SCHEDULED_REBUILD_ENABLED": "false"}):
             first = get_scheduler()
-        # Now env var is unset/reset, but memoized state should still return None
+        # Even with env var changed, the memoised disabled flag stays True
         with patch.dict(os.environ, {"SCHEDULED_REBUILD_ENABLED": "true"}):
             second = get_scheduler()
         assert first is None
-        assert second is None  # memoized as disabled
+        assert second is None  # memoised as disabled
 
     def test_set_scheduler_resets_disabled_flag(self) -> None:
         """set_scheduler() must clear the disabled flag so future calls work correctly."""
@@ -87,9 +81,6 @@ class TestGetScheduler:
 
         set_scheduler(None)  # reset both singleton and disabled flag
 
-        # After reset, a new call with enabled=true should be able to create scheduler
-        # (we can't easily instantiate a real Scheduler without DI, so just verify
-        # the disabled flag was cleared by checking get_scheduler is re-entered)
         from backend.api import dependencies
         assert not dependencies._scheduler_disabled
 

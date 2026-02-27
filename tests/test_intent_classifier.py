@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient  # used via conftest client fixture
 
-from backend.api.dependencies import set_intent_service
 from backend.application.intent_service import IntentService
 from backend.domain.constants import (
     INTENT_RULE_WEIGHT,
@@ -337,17 +336,6 @@ class TestIntentServiceClassify:
 # ---------------------------------------------------------------------------
 # API endpoint integration tests
 # ---------------------------------------------------------------------------
-
-@pytest.fixture()
-def mock_intent_service() -> MagicMock:
-    """Inject a mock IntentService into the DI container."""
-    from backend.application.intent_service import IntentService
-
-    mock = MagicMock(spec=IntentService)
-    set_intent_service(mock)
-    yield mock
-    set_intent_service(None)  # type: ignore[arg-type]
-
 
 class TestIntentClassifyEndpoint:
     def test_returns_200_with_valid_message(

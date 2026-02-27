@@ -73,9 +73,11 @@ make restart
 # Create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
 
-# Run tests
+# Install runtime + development/testing dependencies
+pip install -r requirements-dev.txt
+
+# Run tests with coverage
 make test
 
 # Lint and format
@@ -202,6 +204,29 @@ curl http://localhost:8000/index/status
 ```bash
 curl http://localhost:8000/note/notes/adr-005.md/links
 ```
+
+### Error responses
+
+All error responses share a consistent JSON body:
+
+```json
+{
+  "error_code": "SEARCH_UNAVAILABLE",
+  "message": "Human-readable description of the error."
+}
+```
+
+| Status | `error_code` | Meaning |
+|--------|-------------|---------|
+| `409` | `REBUILD_IN_PROGRESS` | A rebuild is already running |
+| `404` | `NOTE_NOT_FOUND` | The requested note is not in the index |
+| `503` | `*_UNAVAILABLE` | A backend service is not ready |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected server error |
+
+### CORS
+
+The API enables CORS for all origins (`*`), allowing the built-in `/dashboard`
+and any local LLM agent running in a browser context to call the API directly.
 
 For full agent integration documentation, see [docs/agents/SKILL.md](docs/agents/SKILL.md).
 

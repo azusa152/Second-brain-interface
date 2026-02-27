@@ -18,8 +18,8 @@ build: ## Build Docker images without starting
 logs: ## Tail logs from all services
 	docker compose logs -f
 
-test: ## Run test suite
-	python -m pytest tests/ -v
+test: ## Run test suite with coverage
+	python -m pytest tests/ -v --cov=backend --cov-report=term-missing
 
 lint: ## Run linter checks
 	ruff check backend/ tests/

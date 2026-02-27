@@ -2,27 +2,9 @@
 
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
-from backend.api.dependencies import set_search_service
-from backend.application.search_service import SearchService
 from backend.domain.models import SearchRequest, SearchResponse, SearchResultItem
-from backend.main import app
-
-
-@pytest.fixture()
-def mock_search_service() -> MagicMock:
-    """Create and inject a mock SearchService."""
-    mock = MagicMock(spec=SearchService)
-    set_search_service(mock)
-    yield mock
-    set_search_service(None)  # type: ignore[arg-type]
-
-
-@pytest.fixture()
-def client() -> TestClient:
-    return TestClient(app)
 
 
 def _make_search_response(query: str = "test", num_results: int = 2) -> SearchResponse:
@@ -125,7 +107,7 @@ class TestSearchEndpoint:
 
         assert resp.status_code == 503
         body = resp.json()
-        assert body["detail"]["error_code"] == "SEARCH_UNAVAILABLE"
+        assert body["error_code"] == "SEARCH_UNAVAILABLE"
 
     def test_search_response_should_include_search_time(
         self, client: TestClient, mock_search_service: MagicMock

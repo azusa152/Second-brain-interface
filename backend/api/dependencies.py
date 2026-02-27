@@ -1,16 +1,16 @@
-import os
+"""Service factory functions used as FastAPI dependencies.
+
+Each ``get_*()`` function returns a cached singleton and is safe to pass
+directly to ``Depends()``.  In tests, override via
+``app.dependency_overrides[get_search_service] = lambda: mock``.
+"""
 
 from backend.application.augment_service import AugmentService
 from backend.application.index_service import IndexService
 from backend.application.intent_service import IntentService
 from backend.application.search_service import SearchService
-from backend.domain.constants import (
-    INTENT_DEFAULT_DOMAIN_ANCHORS,
-    INTENT_DEFAULT_KEYWORDS,
-    POLLING_INTERVAL_SECONDS,
-    REBUILD_CRON_HOUR,
-    REBUILD_CRON_MINUTE,
-)
+from backend.config import get_settings
+from backend.domain.constants import INTENT_DEFAULT_DOMAIN_ANCHORS, INTENT_DEFAULT_KEYWORDS
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.embedding import EmbeddingService
 from backend.infrastructure.event_log import EventLog
@@ -46,32 +46,14 @@ def initialize_services() -> None:
     get_augment_service()
 
 
-def _parse_watcher_config() -> tuple[bool, float]:
-    """Read USE_POLLING_OBSERVER and POLLING_INTERVAL_SECONDS from the environment.
-
-    Returns (use_polling, polling_interval). Falls back to safe defaults and logs a
-    warning when the numeric interval value cannot be parsed.
-    """
-    use_polling = os.getenv("USE_POLLING_OBSERVER", "false").lower() == "true"
-    try:
-        polling_interval = float(
-            os.getenv("POLLING_INTERVAL_SECONDS", str(POLLING_INTERVAL_SECONDS))
-        )
-    except ValueError:
-        logger.warning(
-            "Invalid POLLING_INTERVAL_SECONDS env var; using default %.1fs",
-            POLLING_INTERVAL_SECONDS,
-        )
-        polling_interval = POLLING_INTERVAL_SECONDS
-    return use_polling, polling_interval
-
-
 def get_index_service() -> IndexService:
     """Return the singleton IndexService, creating it on first call."""
     global _index_service, _embedder, _qdrant, _event_log  # noqa: PLW0603
     if _index_service is None:
-        vault_path = os.getenv("OBSIDIAN_VAULT_PATH", "/vault")
-        use_polling, polling_interval = _parse_watcher_config()
+        settings = get_settings()
+        vault_path = settings.obsidian_vault_path
+        use_polling = settings.use_polling_observer
+        polling_interval = settings.polling_interval_seconds
         logger.info(
             "Initializing IndexService with vault: %s (polling=%s, interval=%.1fs)",
             vault_path,
@@ -79,14 +61,13 @@ def get_index_service() -> IndexService:
             polling_interval,
         )
 
-        data_path = os.getenv("HASH_REGISTRY_DATA_PATH", "/data")
         vault_file_map = VaultFileMap(vault_path)
         parser = MarkdownParser(vault_file_map)
         chunker = Chunker()
         _embedder = _embedder or EmbeddingService()
         _qdrant = _qdrant or QdrantAdapter()
         _event_log = _event_log or EventLog()
-        hash_registry = HashRegistry(data_path)
+        hash_registry = HashRegistry(settings.hash_registry_data_path)
 
         _index_service = IndexService(
             vault_path=vault_path,
@@ -115,28 +96,16 @@ def get_scheduler() -> Scheduler | None:
     if _scheduler_disabled:
         return None
     if _scheduler is None:
-        enabled = os.getenv("SCHEDULED_REBUILD_ENABLED", "true").lower() == "true"
-        if not enabled:
+        settings = get_settings()
+        if not settings.scheduled_rebuild_enabled:
             logger.info("Scheduled rebuild disabled (SCHEDULED_REBUILD_ENABLED=false)")
             _scheduler_disabled = True
             return None
 
-        try:
-            cron_hour = int(os.getenv("REBUILD_CRON_HOUR", str(REBUILD_CRON_HOUR)))
-            cron_minute = int(os.getenv("REBUILD_CRON_MINUTE", str(REBUILD_CRON_MINUTE)))
-        except ValueError:
-            logger.warning(
-                "Invalid REBUILD_CRON_HOUR/MINUTE env vars; using defaults %02d:%02d",
-                REBUILD_CRON_HOUR,
-                REBUILD_CRON_MINUTE,
-            )
-            cron_hour = REBUILD_CRON_HOUR
-            cron_minute = REBUILD_CRON_MINUTE
-
         index_service = get_index_service()
         _scheduler = Scheduler(
-            cron_hour=cron_hour,
-            cron_minute=cron_minute,
+            cron_hour=settings.rebuild_cron_hour,
+            cron_minute=settings.rebuild_cron_minute,
             job_fn=index_service.incremental_rebuild,
         )
 
@@ -178,8 +147,7 @@ def get_intent_service() -> IntentService:
     if _intent_service is None:
         _embedder = _embedder or EmbeddingService()
 
-        # Allow per-deployment keyword overrides via comma-separated env var
-        keywords_env = os.getenv("INTENT_PERSONAL_KEYWORDS", "")
+        keywords_env = get_settings().intent_personal_keywords
         keywords = (
             [kw.strip() for kw in keywords_env.split(",") if kw.strip()]
             if keywords_env
@@ -194,30 +162,6 @@ def get_intent_service() -> IntentService:
         logger.info("Initialized IntentService with %d keywords", len(keywords))
 
     return _intent_service
-
-
-def set_augment_service(service: AugmentService) -> None:
-    """Override the AugmentService singleton (for testing)."""
-    global _augment_service  # noqa: PLW0603
-    _augment_service = service
-
-
-def set_index_service(service: IndexService) -> None:
-    """Override the IndexService singleton (for testing)."""
-    global _index_service  # noqa: PLW0603
-    _index_service = service
-
-
-def set_search_service(service: SearchService) -> None:
-    """Override the SearchService singleton (for testing)."""
-    global _search_service  # noqa: PLW0603
-    _search_service = service
-
-
-def set_intent_service(service: IntentService) -> None:
-    """Override the IntentService singleton (for testing)."""
-    global _intent_service  # noqa: PLW0603
-    _intent_service = service
 
 
 def set_scheduler(scheduler: Scheduler | None) -> None:

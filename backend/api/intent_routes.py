@@ -1,8 +1,11 @@
 """POST /intent/classify — classify whether a message requires personal knowledge retrieval."""
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.dependencies import get_intent_service
+from backend.application.intent_service import IntentService
 from backend.domain.models import IntentClassification, IntentRequest
 from backend.logging_config import get_logger
 
@@ -19,7 +22,10 @@ router = APIRouter(prefix="/intent", tags=["intent"])
         503: {"description": "Embedding service not ready"},
     },
 )
-def classify_intent(request: IntentRequest) -> IntentClassification:
+def classify_intent(
+    request: IntentRequest,
+    service: Annotated[IntentService, Depends(get_intent_service)],
+) -> IntentClassification:
     """Classify a user message using keyword, semantic, and temporal signals.
 
     Returns a structured result indicating whether personal context retrieval
@@ -28,8 +34,6 @@ def classify_intent(request: IntentRequest) -> IntentClassification:
 
     Latency target: < 50ms (anchor embeddings are pre-warmed at startup).
     """
-    service = get_intent_service()
-
     try:
         return service.classify(request.message)
     except Exception:
@@ -38,6 +42,6 @@ def classify_intent(request: IntentRequest) -> IntentClassification:
             status_code=503,
             detail={
                 "error_code": "INTENT_CLASSIFIER_UNAVAILABLE",
-                "detail": "Intent classification is temporarily unavailable.",
+                "message": "Intent classification is temporarily unavailable.",
             },
         )

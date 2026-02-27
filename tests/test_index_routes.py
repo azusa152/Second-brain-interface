@@ -3,22 +3,10 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
-from backend.api.dependencies import set_index_service
-from backend.application.index_service import IndexService
 from backend.domain.models import IndexedNoteItem
 from backend.infrastructure.event_log import WatcherEvent
-
-
-@pytest.fixture()
-def mock_index_service() -> MagicMock:
-    """Create and inject a mock IndexService."""
-    mock = MagicMock(spec=IndexService)
-    set_index_service(mock)
-    yield mock
-    set_index_service(None)  # type: ignore[arg-type]
 
 
 class TestGetWatcherEvents:

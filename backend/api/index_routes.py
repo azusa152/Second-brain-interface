@@ -1,6 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 
 from backend.api.dependencies import get_index_service
+from backend.application.index_service import IndexService
+from backend.domain.exceptions import RebuildInProgressError
 from backend.domain.models import (
     IndexedNotesResponse,
     IndexRebuildResponse,
@@ -18,21 +23,20 @@ router = APIRouter(prefix="/index", tags=["index"])
     summary="Trigger full vault re-index",
     responses={409: {"description": "Re-index already in progress"}},
 )
-def rebuild_index() -> IndexRebuildResponse:
+def rebuild_index(
+    service: Annotated[IndexService, Depends(get_index_service)],
+) -> IndexRebuildResponse | JSONResponse:
     """Force a full re-index of the vault (manual trigger)."""
-    service = get_index_service()
-    result = service.rebuild_index()
-
-    if result is None:
-        raise HTTPException(
+    try:
+        return service.rebuild_index()
+    except RebuildInProgressError:
+        return JSONResponse(
             status_code=409,
-            detail={
-                "error_code": "REINDEX_IN_PROGRESS",
-                "detail": "A re-index operation is already running.",
+            content={
+                "error_code": "REBUILD_IN_PROGRESS",
+                "message": "A re-index operation is already running.",
             },
         )
-
-    return result
 
 
 @router.get(
@@ -40,9 +44,10 @@ def rebuild_index() -> IndexRebuildResponse:
     response_model=IndexStatus,
     summary="Get index health and statistics",
 )
-def get_index_status() -> IndexStatus:
+def get_index_status(
+    service: Annotated[IndexService, Depends(get_index_service)],
+) -> IndexStatus:
     """Return current index statistics."""
-    service = get_index_service()
     return service.get_status()
 
 
@@ -52,10 +57,10 @@ def get_index_status() -> IndexStatus:
     summary="Get recent file watcher events",
 )
 def get_watcher_events(
+    service: Annotated[IndexService, Depends(get_index_service)],
     limit: int = Query(default=50, ge=1, le=100),
 ) -> WatcherEventsResponse:
     """Return the most recent file watcher events, newest first."""
-    service = get_index_service()
     events = service.get_recent_events(limit)
     return WatcherEventsResponse(
         events=[
@@ -76,8 +81,9 @@ def get_watcher_events(
     response_model=IndexedNotesResponse,
     summary="List all indexed notes",
 )
-def get_indexed_notes() -> IndexedNotesResponse:
+def get_indexed_notes(
+    service: Annotated[IndexService, Depends(get_index_service)],
+) -> IndexedNotesResponse:
     """Return all indexed notes with path and title."""
-    service = get_index_service()
     notes = service.get_indexed_notes()
     return IndexedNotesResponse(notes=notes, total=len(notes))

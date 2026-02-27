@@ -3,17 +3,20 @@ import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api.dependencies import get_index_service, get_scheduler, initialize_services
-from backend.application.index_service import IndexService
 from backend.api.augment_routes import router as augment_router
+from backend.api.dependencies import get_index_service, get_scheduler, initialize_services
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
 from backend.api.intent_routes import router as intent_router
 from backend.api.note_routes import router as note_router
 from backend.api.search_routes import router as search_router
+from backend.application.index_service import IndexService
+from backend.config import get_settings
 from backend.logging_config import get_logger, setup_logging
 
 setup_logging()
@@ -21,7 +24,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Initialize services on startup, start file watcher and scheduler, stop on shutdown."""
     logger.info("Starting up: initializing services")
     initialize_services()
@@ -45,8 +48,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 
 def _maybe_startup_incremental_rebuild(index_service: IndexService) -> None:
     """Run incremental_rebuild in a background thread if STARTUP_INCREMENTAL_REBUILD is enabled."""
-    enabled = os.getenv("STARTUP_INCREMENTAL_REBUILD", "true").lower() == "true"
-    if not enabled:
+    if not get_settings().startup_incremental_rebuild:
         return
     logger.info("Running startup incremental rebuild in background thread")
     t = threading.Thread(
@@ -64,6 +66,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS — permits the dashboard (served at /dashboard) and any local LLM agent
+# to call the API directly from a browser context.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health_router)
 app.include_router(index_router)
 app.include_router(search_router)
@@ -71,7 +82,21 @@ app.include_router(note_router)
 app.include_router(intent_router)
 app.include_router(augment_router)
 
-# Mount dashboard static files AFTER API routers (StaticFiles is a catch-all)
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Return a structured 500 response for any unhandled exception."""
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error_code": "INTERNAL_SERVER_ERROR",
+            "message": "An unexpected error occurred.",
+        },
+    )
+
+
+# Mount dashboard static files AFTER API routers (StaticFiles is a catch-all).
 _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.isdir(_frontend_dir):
     app.mount("/dashboard", StaticFiles(directory=_frontend_dir, html=True))

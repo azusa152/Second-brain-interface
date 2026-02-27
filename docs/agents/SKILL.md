@@ -88,7 +88,12 @@ Classify intent, retrieve relevant vault context when needed, and return a fully
 }
 ```
 
-**Errors**: 422 (invalid parameters), 503 (service unavailable)
+**Errors**:
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `422` | Pydantic validation detail | Invalid request parameters |
+| `503` | `{"error_code": "AUGMENT_UNAVAILABLE", "message": "..."}` | Service not ready |
 
 **Augmented prompt format**: The `augmented_prompt` field uses this structure when context is injected:
 ```
@@ -156,7 +161,12 @@ Hybrid semantic + keyword search over indexed vault content. Returns ranked chun
 }
 ```
 
-**Errors**: 422 (invalid parameters), 503 (index not ready)
+**Errors**:
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `422` | Pydantic validation detail | Invalid request parameters |
+| `503` | `{"error_code": "SEARCH_UNAVAILABLE", "message": "..."}` | Index not ready |
 
 ### 3. Rebuild Index — `POST /index/rebuild`
 
@@ -174,7 +184,11 @@ Trigger a full re-index of all `.md` files in the vault. Deletes existing data a
 }
 ```
 
-**Errors**: 409 (rebuild already in progress)
+**Errors**:
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `409` | `{"error_code": "REBUILD_IN_PROGRESS", "message": "..."}` | Rebuild already running |
 
 ### 4. Index Status — `GET /index/status`
 
@@ -211,7 +225,11 @@ Get all outgoing wikilinks and backlinks for a specific note. Useful for graph e
 }
 ```
 
-**Errors**: 404 (note not in index)
+**Errors**:
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `404` | `{"error_code": "NOTE_NOT_FOUND", "message": "..."}` | Note not in index |
 
 ### 6. Watcher Events — `GET /index/events`
 
@@ -303,7 +321,7 @@ Classify whether a user message requires personal knowledge retrieval. Returns a
 | `triggered_signals` | list[str] | Signals that fired (e.g., `keyword:*`, `semantic`, `temporal:*`) |
 | `suggested_query` | string \| null | Cleaned query with conversational prefixes stripped |
 
-**Errors**: 422 (invalid parameters)
+**Errors**: 422 (Pydantic validation detail — invalid parameters)
 
 ### 9. Health Check — `GET /health`
 

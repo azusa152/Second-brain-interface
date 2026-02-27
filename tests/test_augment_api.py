@@ -5,22 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.api.dependencies import set_augment_service
-from backend.application.augment_service import AugmentService
 from backend.domain.models import AugmentResponse, ContextBlock, SourceCitation
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture()
-def mock_augment_service() -> MagicMock:
-    """Inject a mock AugmentService into the DI container."""
-    mock = MagicMock(spec=AugmentService)
-    set_augment_service(mock)
-    yield mock
-    set_augment_service(None)  # type: ignore[arg-type]
 
 
 def _context_response() -> AugmentResponse:
