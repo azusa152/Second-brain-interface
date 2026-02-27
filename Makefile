@@ -19,11 +19,11 @@ logs: ## Tail logs from all services
 	docker compose logs -f
 
 test: ## Run test suite with coverage
-	python -m pytest tests/ -v --cov=backend --cov-report=term-missing
+	.venv/bin/python -m pytest tests/ -v --cov=backend --cov-report=term-missing
 
 lint: ## Run linter checks
-	ruff check backend/ tests/
+	.venv/bin/ruff check backend/ tests/
 
 format: ## Auto-format and fix code
-	ruff format backend/ tests/
-	ruff check --fix backend/ tests/
+	.venv/bin/ruff format backend/ tests/
+	.venv/bin/ruff check --fix backend/ tests/

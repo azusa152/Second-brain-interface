@@ -2,8 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.dependencies import get_augment_service
 from backend.application.augment_service import AugmentService
@@ -26,7 +25,7 @@ router = APIRouter(prefix="/augment", tags=["augment"])
 def augment_prompt(
     request: AugmentRequest,
     service: Annotated[AugmentService, Depends(get_augment_service)],
-) -> AugmentResponse | JSONResponse:
+) -> AugmentResponse:
     """Run the full classify → retrieve → format pipeline in a single call.
 
     - If the message does not require personal context: returns immediately
@@ -40,13 +39,13 @@ def augment_prompt(
     """
     try:
         return service.augment(request)
-    except Exception:
+    except Exception as err:
         logger.exception("Augmentation failed for message: %.80s", request.message)
-        return JSONResponse(
+        raise HTTPException(
             status_code=503,
-            content={
+            detail={
                 "error_code": "AUGMENT_UNAVAILABLE",
                 "message": "Augmentation service is temporarily unavailable. "
                 "Ensure the index has been built and the embedding model is loaded.",
             },
-        )
+        ) from err

@@ -24,9 +24,7 @@ from backend.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def _create_observer(
-    use_polling: bool, polling_interval: float
-) -> Observer | PollingObserver:
+def _create_observer(use_polling: bool, polling_interval: float) -> Observer | PollingObserver:
     if use_polling:
         safe_interval = max(POLLING_INTERVAL_MIN_SECONDS, polling_interval)
         if safe_interval != polling_interval:
@@ -127,9 +125,7 @@ class FileWatcher:
             on_moved=on_moved,
         )
         self._observer = _create_observer(use_polling, polling_interval)
-        self._mode: Literal["polling", "event"] = (
-            "polling" if use_polling else "event"
-        )
+        self._mode: Literal["polling", "event"] = "polling" if use_polling else "event"
         self._running = False
 
     def start(self) -> None:
@@ -139,9 +135,7 @@ class FileWatcher:
         self._observer.schedule(self._handler, self._vault_path, recursive=True)
         self._observer.start()
         self._running = True
-        logger.info(
-            "File watcher started for: %s (mode=%s)", self._vault_path, self._mode
-        )
+        logger.info("File watcher started for: %s (mode=%s)", self._vault_path, self._mode)
 
     def stop(self) -> None:
         """Stop watching the vault directory."""

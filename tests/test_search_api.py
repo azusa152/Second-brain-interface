@@ -32,9 +32,7 @@ class TestSearchEndpoint:
     def test_search_should_return_200_with_results(
         self, client: TestClient, mock_search_service: MagicMock
     ) -> None:
-        mock_search_service.search.return_value = _make_search_response(
-            "database migration", 3
-        )
+        mock_search_service.search.return_value = _make_search_response("database migration", 3)
 
         resp = client.post("/search", json={"query": "database migration"})
 

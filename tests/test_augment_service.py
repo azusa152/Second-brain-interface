@@ -25,6 +25,7 @@ from backend.domain.models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_result(
     note_path: str = "notes/foo.md",
     note_title: str = "Foo",
@@ -83,6 +84,7 @@ def _make_service(
 # XML helpers
 # ---------------------------------------------------------------------------
 
+
 class TestXmlEscaping:
     def test_escape_attr_ampersand(self) -> None:
         assert escape_xml_attr("a&b") == "a&amp;b"
@@ -107,6 +109,7 @@ class TestXmlEscaping:
 # ---------------------------------------------------------------------------
 # Pipeline: general query (no retrieval)
 # ---------------------------------------------------------------------------
+
 
 class TestAugmentPipelineNoRetrieval:
     def test_general_query_skips_retrieval(self) -> None:
@@ -140,6 +143,7 @@ class TestAugmentPipelineNoRetrieval:
 # ---------------------------------------------------------------------------
 # Pipeline: personal query with results
 # ---------------------------------------------------------------------------
+
 
 class TestAugmentPipelineWithContext:
     def test_personal_query_with_results_injects_context(self) -> None:
@@ -221,6 +225,7 @@ class TestAugmentPipelineWithContext:
 # Pipeline: personal query with no results
 # ---------------------------------------------------------------------------
 
+
 class TestAugmentPipelineNoResults:
     def test_no_results_sets_retrieval_attempted_true(self) -> None:
         svc = _make_service(search_results=[])
@@ -245,6 +250,7 @@ class TestAugmentPipelineNoResults:
 # ---------------------------------------------------------------------------
 # _format_context_block
 # ---------------------------------------------------------------------------
+
 
 class TestFormatContextBlock:
     def test_xml_structure_is_valid(self) -> None:
@@ -361,8 +367,11 @@ class TestFormatContextBlock:
 # _assemble_augmented_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestAssembleAugmentedPrompt:
-    def _make_block(self, xml: str = "<context>\n  <note score='0.9'>text</note>\n</context>") -> ContextBlock:
+    def _make_block(
+        self, xml: str = "<context>\n  <note score='0.9'>text</note>\n</context>"
+    ) -> ContextBlock:
         return ContextBlock(xml_content=xml, sources=[], total_chars=4)
 
     def test_prompt_contains_system_header(self) -> None:

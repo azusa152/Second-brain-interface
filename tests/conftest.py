@@ -27,6 +27,7 @@ from backend.main import app
 # HTTP client
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def client() -> TestClient:
     """Provide a FastAPI test client (no lifespan — services are injected via overrides)."""
@@ -36,6 +37,7 @@ def client() -> TestClient:
 # ---------------------------------------------------------------------------
 # Shared service mocks — use these in API-layer tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_search_service() -> MagicMock:

@@ -26,9 +26,7 @@ def _make_search_service() -> tuple[SearchService, MagicMock, MagicMock]:
     return service, mock_embedder, mock_qdrant
 
 
-def _make_result_items(
-    paths: list[str], base_score: float = 0.9
-) -> list[SearchResultItem]:
+def _make_result_items(paths: list[str], base_score: float = 0.9) -> list[SearchResultItem]:
     """Create search result items for given note paths."""
     return [
         SearchResultItem(

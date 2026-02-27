@@ -46,9 +46,7 @@ def _make_suggest_response(num_links: int = 2) -> SuggestLinksResponse:
             for i in range(num_links)
         ],
         suggested_tags=["#architecture", "#decision"],
-        related_notes=[
-            NoteLinkItem(note_path="concepts/related.md", note_title="related")
-        ],
+        related_notes=[NoteLinkItem(note_path="concepts/related.md", note_title="related")],
     )
 
 
@@ -236,14 +234,11 @@ class TestSuggestLinksService:
         self, service: SearchService, qdrant: MagicMock
     ) -> None:
         qdrant.hybrid_search.return_value = [
-            _make_result(f"notes/note{i}.md", f"Note {i}", score=1.0 - i * 0.05)
-            for i in range(10)
+            _make_result(f"notes/note{i}.md", f"Note {i}", score=1.0 - i * 0.05) for i in range(10)
         ]
         qdrant.get_related_notes_batch.return_value = {}
 
-        result = service.suggest_links(
-            SuggestLinksRequest(content="query", max_suggestions=3)
-        )
+        result = service.suggest_links(SuggestLinksRequest(content="query", max_suggestions=3))
 
         assert len(result.suggested_wikilinks) == 3
 
@@ -254,9 +249,7 @@ class TestSuggestLinksService:
             _make_result("notes/adr.md", "ADR"),
         ]
         qdrant.get_related_notes_batch.return_value = {
-            "notes/adr.md": [
-                {"related_path": "concepts/flyway.md", "relationship": "outgoing"}
-            ]
+            "notes/adr.md": [{"related_path": "concepts/flyway.md", "relationship": "outgoing"}]
         }
 
         result = service.suggest_links(SuggestLinksRequest(content="migration"))
@@ -272,9 +265,7 @@ class TestSuggestLinksService:
         ]
         # Backlink points back to the suggestion itself
         qdrant.get_related_notes_batch.return_value = {
-            "notes/adr.md": [
-                {"related_path": "notes/adr.md", "relationship": "backlink"}
-            ]
+            "notes/adr.md": [{"related_path": "notes/adr.md", "relationship": "backlink"}]
         }
 
         result = service.suggest_links(SuggestLinksRequest(content="migration"))

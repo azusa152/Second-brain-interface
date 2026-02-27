@@ -27,11 +27,7 @@ class TestEventLogRecord:
     def test_record_should_preserve_dest_path_for_moves(self) -> None:
         log = EventLog()
 
-        log.record(
-            WatcherEvent(
-                event_type="moved", file_path="old.md", dest_path="new.md"
-            )
-        )
+        log.record(WatcherEvent(event_type="moved", file_path="old.md", dest_path="new.md"))
 
         events = log.get_recent()
         assert events[0].dest_path == "new.md"

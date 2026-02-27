@@ -41,10 +41,7 @@ _INSTRUCTION_BLOCK = (
 def escape_xml_attr(text: str) -> str:
     """Escape characters that are special inside XML attribute values."""
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -117,9 +114,7 @@ class AugmentService:
         )
 
         if not search_resp.results:
-            logger.debug(
-                "Augment: retrieval attempted but no results for query '%s'", query
-            )
+            logger.debug("Augment: retrieval attempted but no results for query '%s'", query)
             return _build_response(
                 classification,
                 retrieval_attempted=True,

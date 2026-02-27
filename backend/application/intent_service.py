@@ -74,8 +74,7 @@ class IntentService:
         """
         if not self._anchor_embeddings:
             logger.warning(
-                "Intent classifier: anchor embeddings not warmed up; "
-                "semantic signal will be zero"
+                "Intent classifier: anchor embeddings not warmed up; semantic signal will be zero"
             )
 
         query_embedding = self._embedder.embed_text(message)

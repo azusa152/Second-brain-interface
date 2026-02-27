@@ -30,9 +30,7 @@ def _setup_pipeline() -> tuple[IndexService, SearchService, MagicMock, MagicMock
         SparseVector(indices=[1, 2], values=[0.5, 0.3]) for _ in texts
     ]
     mock_embedder.embed_text.return_value = [0.1] * 384
-    mock_embedder.embed_text_sparse.return_value = SparseVector(
-        indices=[1, 2], values=[0.5, 0.3]
-    )
+    mock_embedder.embed_text_sparse.return_value = SparseVector(indices=[1, 2], values=[0.5, 0.3])
 
     mock_qdrant = MagicMock()
     mock_qdrant.is_healthy.return_value = True
@@ -179,9 +177,7 @@ class TestFullPipeline:
             ]
         }
 
-        response = search_svc.search(
-            SearchRequest(query="linked note", include_related=True)
-        )
+        response = search_svc.search(SearchRequest(query="linked note", include_related=True))
 
         assert response.total_hits == 1
         assert len(response.related_notes) == 2

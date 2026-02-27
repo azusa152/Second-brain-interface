@@ -34,9 +34,7 @@ class SearchService:
         """Execute a hybrid search (dense + sparse) over indexed chunks."""
         start = time.time()
 
-        threshold = (
-            request.threshold if request.threshold is not None else SIMILARITY_THRESHOLD
-        )
+        threshold = request.threshold if request.threshold is not None else SIMILARITY_THRESHOLD
 
         # 1. Embed the query (dense + sparse)
         query_vector = self._embedder.embed_text(request.query)
@@ -179,9 +177,7 @@ class SearchService:
                     if related_path not in suggestion_paths and related_path not in seen_related:
                         seen_related.add(related_path)
                         title = related_path.rsplit("/", 1)[-1].removesuffix(".md")
-                        related_notes.append(
-                            NoteLinkItem(note_path=related_path, note_title=title)
-                        )
+                        related_notes.append(NoteLinkItem(note_path=related_path, note_title=title))
 
         logger.info(
             "suggest_links query='%s': %d wikilinks, %d tags, %d related",

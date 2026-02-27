@@ -80,10 +80,7 @@ class EmbeddingService:
         self._ensure_sparse_loaded()
         assert self._sparse_model is not None
         results = list(self._sparse_model.embed(texts))
-        return [
-            SparseVector(indices=r.indices.tolist(), values=r.values.tolist())
-            for r in results
-        ]
+        return [SparseVector(indices=r.indices.tolist(), values=r.values.tolist()) for r in results]
 
     @staticmethod
     def _to_list(vector: np.ndarray | list[float]) -> list[float]:

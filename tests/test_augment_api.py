@@ -59,6 +59,7 @@ def _no_results_response() -> AugmentResponse:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestAugmentEndpoint:
     def test_returns_200_with_context_for_personal_query(
         self, client: TestClient, mock_augment_service: MagicMock

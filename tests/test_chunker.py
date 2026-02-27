@@ -40,9 +40,7 @@ class TestHeadingSplitting:
 
     def test_chunk_should_preserve_heading_hierarchy(self) -> None:
         chunker = Chunker()
-        content = (
-            "# Top\n\nIntro.\n## Middle\n\nMiddle text.\n### Bottom\n\nBottom text."
-        )
+        content = "# Top\n\nIntro.\n## Middle\n\nMiddle text.\n### Bottom\n\nBottom text."
 
         chunks = chunker.chunk("test.md", content)
 

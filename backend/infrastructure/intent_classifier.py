@@ -27,7 +27,7 @@ _TEMPORAL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\blast\s+month\b", re.IGNORECASE),
     re.compile(r"\blast\s+week\b", re.IGNORECASE),
     re.compile(r"\bQ[1-4]\b"),
-    re.compile(r"\b20[2-3]\d\b"),       # 2020-2039
+    re.compile(r"\b20[2-3]\d\b"),  # 2020-2039
     re.compile(r"\byesterday\b", re.IGNORECASE),
     re.compile(r"\bthis\s+week\b", re.IGNORECASE),
     re.compile(r"\bthis\s+month\b", re.IGNORECASE),
@@ -53,9 +53,9 @@ _POLITENESS_PREFIX = re.compile(
 class ClassifierSignals:
     """Immutable raw signal scores from a single classify() call."""
 
-    rule_score: float              # 0.0-1.0 from keyword matching
-    semantic_score: float          # 0.0-1.0 from embedding cosine similarity
-    temporal_score: float          # 0.0 or 1.0 from temporal heuristic
+    rule_score: float  # 0.0-1.0 from keyword matching
+    semantic_score: float  # 0.0-1.0 from embedding cosine similarity
+    temporal_score: float  # 0.0 or 1.0 from temporal heuristic
     triggered: tuple[str, ...] = field(default_factory=tuple)  # Human-readable labels
 
 
@@ -102,8 +102,7 @@ class IntentClassifier:
     ) -> None:
         # Compile keyword → word-boundary pattern pairs once
         self._keyword_patterns: list[tuple[str, re.Pattern[str]]] = [
-            (kw, re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE))
-            for kw in keywords
+            (kw, re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)) for kw in keywords
         ]
         self._temporal_patterns = temporal_patterns or _TEMPORAL_PATTERNS
 
@@ -138,17 +137,12 @@ class IntentClassifier:
         # --- Signal 2: Semantic ---
         semantic_score = 0.0
         if anchor_embeddings and query_embedding:
-            sims = [
-                cosine_similarity(query_embedding, anchor)
-                for anchor in anchor_embeddings
-            ]
+            sims = [cosine_similarity(query_embedding, anchor) for anchor in anchor_embeddings]
             max_sim = max(sims)
             best_idx = sims.index(max_sim)
             # Normalise to [0, 1]: scores below MIN contribute nothing
             denom = 1.0 - INTENT_SEMANTIC_SIMILARITY_MIN
-            semantic_score = max(
-                0.0, (max_sim - INTENT_SEMANTIC_SIMILARITY_MIN) / denom
-            )
+            semantic_score = max(0.0, (max_sim - INTENT_SEMANTIC_SIMILARITY_MIN) / denom)
             if semantic_score > 0:
                 label = anchor_labels[best_idx] if best_idx < len(anchor_labels) else str(best_idx)
                 triggered.append(f"semantic:{max_sim:.2f}:{label}")

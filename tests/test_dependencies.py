@@ -86,6 +86,7 @@ class TestGetScheduler:
         set_scheduler(None)  # reset both singleton and disabled flag
 
         from backend.api import dependencies
+
         assert not dependencies._scheduler_disabled
 
     def test_invalid_cron_hour_falls_back_to_default(self) -> None:

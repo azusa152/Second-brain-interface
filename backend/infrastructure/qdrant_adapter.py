@@ -244,11 +244,7 @@ class QdrantAdapter:
     def get_indexed_note_paths(self) -> set[str]:
         """Return all unique note_paths in the chunks collection."""
         rows = self._scroll_chunk_payloads(["note_path"])
-        return {
-            r["note_path"]
-            for r in rows
-            if r.get("note_path")
-        }
+        return {r["note_path"] for r in rows if r.get("note_path")}
 
     def get_indexed_notes(self) -> list[IndexedNoteItem]:
         """Return deduplicated list of indexed notes with path and title."""
@@ -340,9 +336,7 @@ class QdrantAdapter:
 
         return items
 
-    def get_related_notes_batch(
-        self, note_paths: set[str]
-    ) -> dict[str, list[dict[str, str]]]:
+    def get_related_notes_batch(self, note_paths: set[str]) -> dict[str, list[dict[str, str]]]:
         """Batch-fetch outgoing links and backlinks for a set of note paths.
 
         Returns a dict keyed by note_path, each value is a list of dicts with
@@ -410,9 +404,7 @@ class QdrantAdapter:
                 key = payload.get(key_field, "")
                 related = payload.get(related_field)
                 if key in relations and related:
-                    relations[key].append(
-                        {"related_path": related, "relationship": relationship}
-                    )
+                    relations[key].append({"related_path": related, "relationship": relationship})
 
             if next_offset is None:
                 break

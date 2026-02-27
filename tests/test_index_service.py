@@ -50,9 +50,7 @@ class TestRebuildIndex:
         service, mock_qdrant, mock_embedder = _make_service()
 
         # Make embed_batch return fake vectors matching chunk count
-        mock_embedder.embed_batch.side_effect = lambda texts: [
-            [0.0] * 384 for _ in texts
-        ]
+        mock_embedder.embed_batch.side_effect = lambda texts: [[0.0] * 384 for _ in texts]
         mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
             MagicMock(indices=[1], values=[0.5]) for _ in texts
         ]
@@ -167,13 +165,9 @@ class TestIncrementalRebuild:
         assert mock_qdrant.bulk_upsert_chunks.call_count == 1
         mock_qdrant.delete_by_note_path.assert_any_call("a.md")
 
-    def test_deleted_file_is_removed_from_qdrant(
-        self, temp_vault: str, data_dir: str
-    ) -> None:
+    def test_deleted_file_is_removed_from_qdrant(self, temp_vault: str, data_dir: str) -> None:
         """A file removed from the vault should be deleted from Qdrant and the registry."""
-        service, mock_qdrant, _, hash_registry = _make_service_with_registry(
-            temp_vault, data_dir
-        )
+        service, mock_qdrant, _, hash_registry = _make_service_with_registry(temp_vault, data_dir)
         service.incremental_rebuild()
         mock_qdrant.reset_mock()
 
@@ -184,9 +178,7 @@ class TestIncrementalRebuild:
         mock_qdrant.delete_links_by_source.assert_any_call("b.md")
         assert hash_registry.get_hash("b.md") is None
 
-    def test_last_scheduled_rebuild_is_set_after_run(
-        self, temp_vault: str, data_dir: str
-    ) -> None:
+    def test_last_scheduled_rebuild_is_set_after_run(self, temp_vault: str, data_dir: str) -> None:
         """last_scheduled_rebuild timestamp should be set after a successful run."""
         service, _, _, _ = _make_service_with_registry(temp_vault, data_dir)
         assert service.get_status().last_scheduled_rebuild is None
@@ -195,9 +187,7 @@ class TestIncrementalRebuild:
 
         assert service.get_status().last_scheduled_rebuild is not None
 
-    def test_second_concurrent_call_is_skipped(
-        self, temp_vault: str, data_dir: str
-    ) -> None:
+    def test_second_concurrent_call_is_skipped(self, temp_vault: str, data_dir: str) -> None:
         """If the lock is held, a concurrent incremental_rebuild call returns immediately."""
         service, mock_qdrant, _, _ = _make_service_with_registry(temp_vault, data_dir)
 
@@ -212,9 +202,7 @@ class TestIncrementalRebuild:
     def test_falls_back_to_full_rebuild_when_no_registry(self) -> None:
         """With no HashRegistry, incremental_rebuild delegates to rebuild_index."""
         service, mock_qdrant, mock_embedder = _make_service()
-        mock_embedder.embed_batch.side_effect = lambda texts: [
-            [0.0] * 384 for _ in texts
-        ]
+        mock_embedder.embed_batch.side_effect = lambda texts: [[0.0] * 384 for _ in texts]
         mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
             MagicMock(indices=[1], values=[0.5]) for _ in texts
         ]
@@ -232,9 +220,7 @@ class TestIncrementalRebuild:
         registry_path = os.path.join(data_dir, "hash_registry.json")
         assert os.path.exists(registry_path)
 
-    def test_file_map_is_refreshed_before_processing(
-        self, temp_vault: str, data_dir: str
-    ) -> None:
+    def test_file_map_is_refreshed_before_processing(self, temp_vault: str, data_dir: str) -> None:
         """New files added after initialize() should be known to VaultFileMap during rebuild."""
         service, _, _, _ = _make_service_with_registry(temp_vault, data_dir)
         new_file = _write(temp_vault, "c.md", "# Note C\n\nNew file.")
@@ -251,9 +237,7 @@ class TestIndexSingleNote:
     def test_index_single_note_should_delete_old_and_insert_new(self) -> None:
         service, mock_qdrant, mock_embedder = _make_service()
         mock_embedder.embed_batch.return_value = [[0.0] * 384]
-        mock_embedder.embed_batch_sparse.return_value = [
-            MagicMock(indices=[1], values=[0.5])
-        ]
+        mock_embedder.embed_batch_sparse.return_value = [MagicMock(indices=[1], values=[0.5])]
 
         service.index_single_note("note1.md")
 
@@ -283,9 +267,7 @@ class TestRenameNote:
     def test_rename_should_delete_old_and_index_new(self) -> None:
         service, mock_qdrant, mock_embedder = _make_service()
         mock_embedder.embed_batch.return_value = [[0.0] * 384]
-        mock_embedder.embed_batch_sparse.return_value = [
-            MagicMock(indices=[1], values=[0.5])
-        ]
+        mock_embedder.embed_batch_sparse.return_value = [MagicMock(indices=[1], values=[0.5])]
 
         service.rename_note("note1.md", "renamed.md")
 
@@ -333,9 +315,7 @@ class TestStartWatcher:
         service._use_polling = True
         service._polling_interval = 5.0
 
-        with patch(
-            "backend.application.index_service.FileWatcher"
-        ) as mock_file_watcher_cls:
+        with patch("backend.application.index_service.FileWatcher") as mock_file_watcher_cls:
             mock_watcher_instance = MagicMock()
             mock_watcher_instance.is_running = False
             mock_file_watcher_cls.return_value = mock_watcher_instance
@@ -351,9 +331,7 @@ class TestStartWatcher:
 
         service, _, _ = _make_service()
 
-        with patch(
-            "backend.application.index_service.FileWatcher"
-        ) as mock_file_watcher_cls:
+        with patch("backend.application.index_service.FileWatcher") as mock_file_watcher_cls:
             mock_watcher_instance = MagicMock()
             mock_watcher_instance.is_running = False
             mock_file_watcher_cls.return_value = mock_watcher_instance
@@ -396,9 +374,7 @@ class TestEventRecording:
         event_log = EventLog()
         service, _, mock_embedder = _make_service(event_log=event_log)
         mock_embedder.embed_batch.return_value = [[0.0] * 384]
-        mock_embedder.embed_batch_sparse.return_value = [
-            MagicMock(indices=[1], values=[0.5])
-        ]
+        mock_embedder.embed_batch_sparse.return_value = [MagicMock(indices=[1], values=[0.5])]
 
         # note1.md exists on disk but hasn't been added to file map yet
         # (file map was scanned in initialize(), so it IS known)
@@ -416,9 +392,7 @@ class TestEventRecording:
         event_log = EventLog()
         service, _, mock_embedder = _make_service(event_log=event_log)
         mock_embedder.embed_batch.return_value = [[0.0] * 384]
-        mock_embedder.embed_batch_sparse.return_value = [
-            MagicMock(indices=[1], values=[0.5])
-        ]
+        mock_embedder.embed_batch_sparse.return_value = [MagicMock(indices=[1], values=[0.5])]
 
         # note1.md is in the fixture vault and was scanned into the file map
         service._on_file_changed("note1.md")
@@ -443,9 +417,7 @@ class TestEventRecording:
         event_log = EventLog()
         service, _, mock_embedder = _make_service(event_log=event_log)
         mock_embedder.embed_batch.return_value = [[0.0] * 384]
-        mock_embedder.embed_batch_sparse.return_value = [
-            MagicMock(indices=[1], values=[0.5])
-        ]
+        mock_embedder.embed_batch_sparse.return_value = [MagicMock(indices=[1], values=[0.5])]
 
         service._on_file_moved("old.md", "new.md")
 

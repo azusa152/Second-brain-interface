@@ -19,10 +19,10 @@ REBUILD_CRON_MINUTE = 0
 HASH_REGISTRY_FILENAME = "hash_registry.json"
 
 # Intent Classification
-INTENT_THRESHOLD = 0.5              # Min composite score to trigger personal context retrieval
-INTENT_RULE_WEIGHT = 0.4            # Weight for keyword signal
-INTENT_SEMANTIC_WEIGHT = 0.4        # Weight for embedding similarity signal
-INTENT_TEMPORAL_WEIGHT = 0.2        # Weight for temporal heuristic signal
+INTENT_THRESHOLD = 0.5  # Min composite score to trigger personal context retrieval
+INTENT_RULE_WEIGHT = 0.4  # Weight for keyword signal
+INTENT_SEMANTIC_WEIGHT = 0.4  # Weight for embedding similarity signal
+INTENT_TEMPORAL_WEIGHT = 0.2  # Weight for temporal heuristic signal
 # Min cosine similarity for semantic signal to contribute (all-MiniLM-L6-v2 scores are lower
 # than intuition suggests; most semantically-similar pairs fall in the 0.3-0.7 range)
 INTENT_SEMANTIC_SIMILARITY_MIN = 0.3
@@ -30,11 +30,21 @@ INTENT_SEMANTIC_SIMILARITY_MIN = 0.3
 # Default personal-domain keywords. All matching uses word boundaries (\b) to avoid false
 # positives. Overly broad single words ("my", "review", "past", "history") are excluded.
 INTENT_DEFAULT_KEYWORDS: list[str] = [
-    "investment", "portfolio", "career", "job interview",
-    "journal", "diary", "meeting notes", "retrospective",
-    "my notes", "my decision", "my plan",
+    "investment",
+    "portfolio",
+    "career",
+    "job interview",
+    "journal",
+    "diary",
+    "meeting notes",
+    "retrospective",
+    "my notes",
+    "my decision",
+    "my plan",
     "past decision",
-    "obsidian", "vault", "knowledge base",
+    "obsidian",
+    "vault",
+    "knowledge base",
     # "last year" excluded: covered by temporal signal to avoid double-scoring
     # "personal" excluded: too broad (matches "personal computer", "personal trainer", etc.)
 ]
@@ -52,7 +62,7 @@ INTENT_DEFAULT_DOMAIN_ANCHORS: list[str] = [
 
 # Suggest Links
 SUGGEST_LINKS_MAX_SUGGESTIONS_DEFAULT = 5  # Default max wikilink suggestions
-SUGGEST_LINKS_QUERY_MAX_CHARS = 400        # Max chars extracted from content for embedding query
+SUGGEST_LINKS_QUERY_MAX_CHARS = 400  # Max chars extracted from content for embedding query
 
 # Context Augmentation
 # Default top-k for augment is lower than search to stay within the LLM context budget

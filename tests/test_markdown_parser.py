@@ -98,9 +98,7 @@ class TestWikilinkExtraction:
         content = "See [[architecture]] for details."
 
         _, links = parser.parse("test.md", content)
-        assert links[0].resolved_target_path == os.path.join(
-            "concepts", "architecture.md"
-        )
+        assert links[0].resolved_target_path == os.path.join("concepts", "architecture.md")
 
     def test_parse_should_handle_aliased_links(self) -> None:
         parser = _make_parser()

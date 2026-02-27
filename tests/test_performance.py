@@ -58,9 +58,7 @@ def _make_perf_service(vault_path: str) -> tuple[IndexService, MagicMock]:
 
 
 class TestRebuildPerformance:
-    def test_rebuild_100_notes_should_complete_under_30_seconds(
-        self, perf_vault: str
-    ) -> None:
+    def test_rebuild_100_notes_should_complete_under_30_seconds(self, perf_vault: str) -> None:
         service, _mock_qdrant = _make_perf_service(perf_vault)
 
         start = time.time()
@@ -73,9 +71,7 @@ class TestRebuildPerformance:
         assert result.chunks_created > 0
         assert elapsed < 30.0, f"Rebuild took {elapsed:.1f}s (limit: 30s)"
 
-    def test_rebuild_should_create_reasonable_chunk_count(
-        self, perf_vault: str
-    ) -> None:
+    def test_rebuild_should_create_reasonable_chunk_count(self, perf_vault: str) -> None:
         service, _ = _make_perf_service(perf_vault)
         result = service.rebuild_index()
 

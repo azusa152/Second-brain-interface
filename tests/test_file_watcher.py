@@ -124,9 +124,7 @@ class TestObserverModeSelection:
         watcher.stop()
         assert not watcher.is_running
 
-    def test_polling_watcher_should_detect_file_creation(
-        self, temp_vault: str
-    ) -> None:
+    def test_polling_watcher_should_detect_file_creation(self, temp_vault: str) -> None:
         on_changed = MagicMock()
         watcher = FileWatcher(
             vault_path=temp_vault,
@@ -268,9 +266,7 @@ class TestFileWatcherEvents:
 
             # on_changed should not be called for non-.md files
             for c in on_changed.call_args_list:
-                assert ".md" in c.args[0], (
-                    f"Non-.md file triggered callback: {c.args[0]}"
-                )
+                assert ".md" in c.args[0], f"Non-.md file triggered callback: {c.args[0]}"
         finally:
             watcher.stop()
 

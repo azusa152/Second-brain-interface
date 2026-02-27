@@ -31,7 +31,7 @@ _ANCHOR_LABELS = ["finance", "career"]
 
 # Unit embedding vectors aligned with anchors (same dimension, unit-normalised is fine)
 _ZERO_EMBED: list[float] = [0.0] * 4
-_FINANCE_EMBED: list[float] = [1.0, 0.0, 0.0, 0.0]   # max-sim with finance anchor
+_FINANCE_EMBED: list[float] = [1.0, 0.0, 0.0, 0.0]  # max-sim with finance anchor
 _UNRELATED_EMBED: list[float] = [0.0, 0.0, 0.0, 1.0]  # low sim with all anchors
 
 
@@ -57,6 +57,7 @@ def _make_signals(
 # _cosine_similarity
 # ---------------------------------------------------------------------------
 
+
 class TestCosineSimilarity:
     def test_identical_vectors_return_one(self) -> None:
         v = [1.0, 0.0, 0.0]
@@ -77,14 +78,18 @@ class TestCosineSimilarity:
 # strip_politeness_prefix
 # ---------------------------------------------------------------------------
 
+
 class TestStripPolitenessPrefix:
-    @pytest.mark.parametrize("prefix,remainder", [
-        ("can you tell me what was my investment return", "what was my investment return"),
-        ("please find my career notes", "my career notes"),
-        ("could you tell me about my portfolio", "about my portfolio"),
-        ("I'd like to know my goals", "my goals"),
-        ("tell me about my journal", "my journal"),
-    ])
+    @pytest.mark.parametrize(
+        "prefix,remainder",
+        [
+            ("can you tell me what was my investment return", "what was my investment return"),
+            ("please find my career notes", "my career notes"),
+            ("could you tell me about my portfolio", "about my portfolio"),
+            ("I'd like to know my goals", "my goals"),
+            ("tell me about my journal", "my journal"),
+        ],
+    )
     def test_strips_known_prefixes(self, prefix: str, remainder: str) -> None:
         assert strip_politeness_prefix(prefix) == remainder
 
@@ -102,6 +107,7 @@ class TestStripPolitenessPrefix:
 # ---------------------------------------------------------------------------
 # Keyword Signal
 # ---------------------------------------------------------------------------
+
 
 class TestKeywordSignal:
     def test_no_keywords_score_zero(self) -> None:
@@ -149,18 +155,22 @@ class TestKeywordSignal:
 # Temporal Signal
 # ---------------------------------------------------------------------------
 
+
 class TestTemporalSignal:
-    @pytest.mark.parametrize("phrase", [
-        "last year",
-        "last month",
-        "last week",
-        "Q3",
-        "2024",
-        "yesterday",
-        "this week",
-        "this month",
-        "this year",
-    ])
+    @pytest.mark.parametrize(
+        "phrase",
+        [
+            "last year",
+            "last month",
+            "last week",
+            "Q3",
+            "2024",
+            "yesterday",
+            "this week",
+            "this month",
+            "this year",
+        ],
+    )
     def test_temporal_phrase_fires_signal(self, phrase: str) -> None:
         clf = _make_classifier([])  # no keywords to isolate signal
         signals = clf.classify(f"what did I do {phrase}?", _ZERO_EMBED, [], [])
@@ -188,6 +198,7 @@ class TestTemporalSignal:
 # ---------------------------------------------------------------------------
 # Semantic Signal
 # ---------------------------------------------------------------------------
+
 
 class TestSemanticSignal:
     def test_empty_anchors_yield_zero_semantic_score(self) -> None:
@@ -226,6 +237,7 @@ class TestSemanticSignal:
 # Composite Score
 # ---------------------------------------------------------------------------
 
+
 class TestCompositeScore:
     def test_all_zeros_yield_zero(self) -> None:
         assert composite_score(_make_signals()) == pytest.approx(0.0)
@@ -250,6 +262,7 @@ class TestCompositeScore:
 # ---------------------------------------------------------------------------
 # IntentService (via mocked embedder)
 # ---------------------------------------------------------------------------
+
 
 class TestIntentServiceClassify:
     def _make_service(
@@ -335,6 +348,7 @@ class TestIntentServiceClassify:
 # ---------------------------------------------------------------------------
 # API endpoint integration tests
 # ---------------------------------------------------------------------------
+
 
 class TestIntentClassifyEndpoint:
     def test_returns_200_with_valid_message(
