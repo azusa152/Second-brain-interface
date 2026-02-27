@@ -8,3 +8,5 @@ watchdog==4.0.2
 apscheduler==3.10.4
 pyyaml==6.0.3
 markdown-it-py==3.0.0
+# Transitive dep of fastembed; pinned to patch CVE-2026-25990 (out-of-bounds write in PSD loader)
+pillow==12.1.1

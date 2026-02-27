@@ -2,16 +2,15 @@
 
 import os
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, cast
 
 from watchdog.events import (
-    FileCreatedEvent,
-    FileDeletedEvent,
-    FileModifiedEvent,
     FileMovedEvent,
+    FileSystemEvent,
     FileSystemEventHandler,
 )
 from watchdog.observers import Observer
+from watchdog.observers.api import BaseObserver
 from watchdog.observers.polling import PollingObserver
 
 from backend.domain.constants import (
@@ -24,7 +23,7 @@ from backend.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def _create_observer(use_polling: bool, polling_interval: float) -> Observer | PollingObserver:
+def _create_observer(use_polling: bool, polling_interval: float) -> BaseObserver:
     if use_polling:
         safe_interval = max(POLLING_INTERVAL_MIN_SECONDS, polling_interval)
         if safe_interval != polling_interval:
@@ -60,47 +59,48 @@ class _VaultEventHandler(FileSystemEventHandler):
         """Convert absolute path to vault-relative path."""
         return os.path.relpath(abs_path, self._vault_path)
 
-    def on_created(self, event: FileCreatedEvent) -> None:
+    def on_created(self, event: FileSystemEvent) -> None:
         if event.is_directory or not self._is_watched(event.src_path):
             return
         rel = self._rel_path(event.src_path)
         logger.info("File created: %s", rel)
         self._on_changed(rel)
 
-    def on_modified(self, event: FileModifiedEvent) -> None:
+    def on_modified(self, event: FileSystemEvent) -> None:
         if event.is_directory or not self._is_watched(event.src_path):
             return
         rel = self._rel_path(event.src_path)
         logger.info("File modified: %s", rel)
         self._on_changed(rel)
 
-    def on_deleted(self, event: FileDeletedEvent) -> None:
+    def on_deleted(self, event: FileSystemEvent) -> None:
         if event.is_directory or not self._is_watched(event.src_path):
             return
         rel = self._rel_path(event.src_path)
         logger.info("File deleted: %s", rel)
         self._on_deleted(rel)
 
-    def on_moved(self, event: FileMovedEvent) -> None:
+    def on_moved(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
 
-        old_watched = self._is_watched(event.src_path)
-        new_watched = self._is_watched(event.dest_path)
+        moved = cast(FileMovedEvent, event)
+        old_watched = self._is_watched(moved.src_path)
+        new_watched = self._is_watched(moved.dest_path)
 
         if old_watched and new_watched:
-            old_rel = self._rel_path(event.src_path)
-            new_rel = self._rel_path(event.dest_path)
+            old_rel = self._rel_path(moved.src_path)
+            new_rel = self._rel_path(moved.dest_path)
             logger.info("File moved: %s -> %s", old_rel, new_rel)
             self._on_moved(old_rel, new_rel)
         elif old_watched and not new_watched:
             # Renamed to a non-.md extension — treat as delete
-            old_rel = self._rel_path(event.src_path)
+            old_rel = self._rel_path(moved.src_path)
             logger.info("File moved out of watch scope (delete): %s", old_rel)
             self._on_deleted(old_rel)
         elif not old_watched and new_watched:
             # Renamed from non-.md to .md — treat as create
-            new_rel = self._rel_path(event.dest_path)
+            new_rel = self._rel_path(moved.dest_path)
             logger.info("File moved into watch scope (create): %s", new_rel)
             self._on_changed(new_rel)
 
