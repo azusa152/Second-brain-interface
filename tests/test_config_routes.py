@@ -3,9 +3,7 @@ from fastapi.testclient import TestClient
 from backend import config as config_module
 
 
-def test_vault_config_should_return_explicit_vault_name(
-    client: TestClient, monkeypatch
-) -> None:
+def test_vault_config_should_return_explicit_vault_name(client: TestClient, monkeypatch) -> None:
     monkeypatch.setenv("OBSIDIAN_VAULT_NAME", "My Vault")
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "/Users/test/ignored")
     config_module.get_settings.cache_clear()

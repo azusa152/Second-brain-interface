@@ -2,6 +2,7 @@ import os
 import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -106,7 +107,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 class NoCacheStaticFiles(StaticFiles):
     """StaticFiles with no-cache to force browser revalidation."""
 
-    def file_response(self, *args, **kwargs) -> Response:
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
         response = super().file_response(*args, **kwargs)
         response.headers.setdefault("Cache-Control", "no-cache")
         return response

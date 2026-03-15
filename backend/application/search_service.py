@@ -239,7 +239,9 @@ class SearchService:
             return f"{title}. {body}" if body else title
         return body or content[:SUGGEST_LINKS_QUERY_MAX_CHARS]
 
-    def _query_logging_fields(self, query: str, preview_length: int | None = None) -> dict[str, str | int]:
+    def _query_logging_fields(
+        self, query: str, preview_length: int | None = None
+    ) -> dict[str, str | int]:
         """Return privacy-safe query logging fields."""
         fields: dict[str, str | int] = {
             "query_len": len(query),
