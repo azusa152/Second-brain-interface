@@ -24,6 +24,15 @@ Use `make` commands to control the service lifecycle:
 - **Index must be built first**: Before searching, trigger a full index rebuild via `POST /index/rebuild`. The file watcher keeps the index updated after the initial build.
 - **Local only**: All processing (embedding, indexing, search) happens on the user's machine. No external API calls.
 
+## Request Correlation and Logging
+
+- Send `X-Request-ID` on incoming requests to correlate API, application, and infrastructure logs.
+- If missing, the backend generates a request ID and returns it in the response header.
+- Logging environment variables:
+  - `LOG_LEVEL` (default `INFO`)
+  - `LOG_FORMAT` (default `json`; supports `json` or `console`)
+  - `LOG_INCLUDE_QUERY_TEXT` (default `false`; keep disabled for privacy)
+
 ## Endpoints
 
 > **Recommended primary endpoint**: Use `POST /augment` for most agent interactions.

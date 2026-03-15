@@ -20,6 +20,18 @@ description: Search and retrieve context from the user's Obsidian vault. Augment
 - Read-only vault: this service never modifies notes
 - Local only: no external API calls
 
+## Request Correlation
+
+- You may send `X-Request-ID` on API calls for traceability.
+- If omitted, the backend generates one and returns it in the response header.
+- Reuse the same `X-Request-ID` across retries to simplify troubleshooting.
+
+## Logging Environment
+
+- `LOG_LEVEL` (`INFO` default): `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+- `LOG_FORMAT` (`json` default): `json` for machine parsing, `console` for local readability
+- `LOG_INCLUDE_QUERY_TEXT` (`false` default): keep disabled unless temporarily debugging sensitive query flows
+
 ## Workflows
 
 ### A — Retrieve vault context (primary, use this by default)

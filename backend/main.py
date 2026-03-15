@@ -14,6 +14,7 @@ from backend.api.dependencies import get_index_service, get_scheduler, initializ
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
 from backend.api.intent_routes import router as intent_router
+from backend.api.middleware import AccessLogMiddleware, RequestIDMiddleware
 from backend.api.note_routes import router as note_router
 from backend.api.search_routes import router as search_router
 from backend.application.index_service import IndexService
@@ -21,6 +22,8 @@ from backend.config import get_settings
 from backend.logging_config import get_logger, setup_logging
 
 setup_logging()
+_settings = get_settings()
+setup_logging(log_level=_settings.log_level, json_output=_settings.log_format == "json")
 logger = get_logger(__name__)
 
 
@@ -75,6 +78,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(AccessLogMiddleware, skip_paths={"/health"})
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(health_router)
 app.include_router(config_router)

@@ -1,3 +1,4 @@
+import hashlib
 import time
 from collections import Counter
 
@@ -26,9 +27,11 @@ class SearchService:
         self,
         embedder: EmbeddingService,
         qdrant_adapter: QdrantAdapter,
+        include_query_text_in_logs: bool = False,
     ) -> None:
         self._embedder = embedder
         self._qdrant = qdrant_adapter
+        self._include_query_text_in_logs = include_query_text_in_logs
 
     def search(self, request: SearchRequest) -> SearchResponse:
         """Execute a hybrid search (dense + sparse) over indexed chunks."""
@@ -56,11 +59,13 @@ class SearchService:
         elapsed_ms = (time.time() - start) * 1000
 
         logger.info(
-            "Search '%s': %d results, %d related in %.1fms",
-            request.query,
-            len(results),
-            len(related_notes),
-            elapsed_ms,
+            "search_completed",
+            top_k=request.top_k,
+            include_related=request.include_related,
+            results=len(results),
+            related=len(related_notes),
+            duration_ms=round(elapsed_ms, 1),
+            **self._query_logging_fields(request.query),
         )
 
         return SearchResponse(
@@ -180,11 +185,12 @@ class SearchService:
                         related_notes.append(NoteLinkItem(note_path=related_path, note_title=title))
 
         logger.info(
-            "suggest_links query='%s': %d wikilinks, %d tags, %d related",
-            query[:60],
-            len(suggested_wikilinks),
-            len(suggested_tags),
-            len(related_notes),
+            "suggest_links_completed",
+            max_suggestions=request.max_suggestions,
+            wikilinks=len(suggested_wikilinks),
+            tags=len(suggested_tags),
+            related=len(related_notes),
+            **self._query_logging_fields(query, preview_length=60),
         )
 
         return SuggestLinksResponse(
@@ -232,3 +238,13 @@ class SearchService:
         if title:
             return f"{title}. {body}" if body else title
         return body or content[:SUGGEST_LINKS_QUERY_MAX_CHARS]
+
+    def _query_logging_fields(self, query: str, preview_length: int | None = None) -> dict[str, str | int]:
+        """Return privacy-safe query logging fields."""
+        fields: dict[str, str | int] = {
+            "query_len": len(query),
+            "query_hash": hashlib.sha256(query.encode("utf-8")).hexdigest()[:12],
+        }
+        if self._include_query_text_in_logs:
+            fields["query"] = query if preview_length is None else query[:preview_length]
+        return fields

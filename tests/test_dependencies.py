@@ -43,6 +43,19 @@ class TestSettingsWatcherConfig:
             settings = Settings(_env_file=None)  # type: ignore[call-arg]
         assert settings.use_polling_observer is False
 
+    def test_invalid_log_level_should_fallback_to_info(self) -> None:
+        settings = Settings(_env_file=None, log_level="nope")  # type: ignore[call-arg]
+        assert settings.log_level == "INFO"
+
+    def test_invalid_log_format_should_fallback_to_json(self) -> None:
+        settings = Settings(_env_file=None, log_format="yaml")  # type: ignore[call-arg]
+        assert settings.log_format == "json"
+
+    def test_log_include_query_text_should_parse_from_env(self) -> None:
+        with patch.dict(os.environ, {"LOG_INCLUDE_QUERY_TEXT": "true"}):
+            settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.log_include_query_text is True
+
 
 class TestGetScheduler:
     """Tests for get_scheduler() env var parsing and memoization."""

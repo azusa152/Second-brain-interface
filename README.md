@@ -95,6 +95,26 @@ Then restart the services:
 make restart
 ```
 
+## Logging Configuration
+
+The backend uses structured logging with `structlog` and includes request
+correlation IDs for API tracing.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| `LOG_FORMAT` | `json` | Log output format (`json` for Docker/aggregation, `console` for local readability) |
+| `LOG_INCLUDE_QUERY_TEXT` | `false` | Include raw query text in logs. Keep disabled by default for privacy. |
+
+When `LOG_FORMAT=json`, each log line is machine-parseable and includes fields
+like `timestamp`, `level`, `logger`, and request-scoped `request_id`.
+
+```bash
+# Example: verbose local debugging with readable console output
+LOG_LEVEL=DEBUG
+LOG_FORMAT=console
+```
+
 ## Local Development
 
 ```bash

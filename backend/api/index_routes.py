@@ -13,8 +13,10 @@ from backend.domain.models import (
     WatcherEventItem,
     WatcherEventsResponse,
 )
+from backend.logging_config import get_logger
 
 router = APIRouter(prefix="/index", tags=["index"])
+logger = get_logger(__name__)
 
 
 @router.post(
@@ -28,8 +30,10 @@ def rebuild_index(
 ) -> IndexRebuildResponse | JSONResponse:
     """Force a full re-index of the vault (manual trigger)."""
     try:
+        logger.info("rebuild_requested")
         return service.rebuild_index()
     except RebuildInProgressError:
+        logger.warning("rebuild_rejected_in_progress")
         return JSONResponse(
             status_code=409,
             content={
@@ -48,6 +52,7 @@ def get_index_status(
     service: Annotated[IndexService, Depends(get_index_service)],
 ) -> IndexStatus:
     """Return current index statistics."""
+    logger.debug("index_status_requested")
     return service.get_status()
 
 
@@ -61,6 +66,7 @@ def get_watcher_events(
     limit: int = Query(default=50, ge=1, le=100),
 ) -> WatcherEventsResponse:
     """Return the most recent file watcher events, newest first."""
+    logger.debug("watcher_events_requested", limit=limit)
     events = service.get_recent_events(limit)
     return WatcherEventsResponse(
         events=[
@@ -85,5 +91,6 @@ def get_indexed_notes(
     service: Annotated[IndexService, Depends(get_index_service)],
 ) -> IndexedNotesResponse:
     """Return all indexed notes with path and title."""
+    logger.debug("indexed_notes_requested")
     notes = service.get_indexed_notes()
     return IndexedNotesResponse(notes=notes, total=len(notes))
