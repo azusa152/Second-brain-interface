@@ -50,7 +50,10 @@
     <section class="panel" id="panel-search">
       <h2>Search Playground</h2>
       <form id="search-form" class="search-controls">
-        <input type="text" id="search-input" placeholder="Search your vault..." autocomplete="off">
+        <div class="search-input-wrap">
+          <input type="text" id="search-input" placeholder="Search by keyword or phrase..." autocomplete="off">
+          <button type="button" id="search-clear" class="input-clear-btn" hidden aria-label="Clear search">x</button>
+        </div>
         <div class="topk-group">
           <label for="search-top-k">Top K</label>
           <input type="range" id="search-top-k" min="1" max="20" value="5">
@@ -58,9 +61,11 @@
         </div>
         <button type="submit">Search</button>
       </form>
+      <p id="search-meta" class="search-meta" aria-live="polite">Ready for keyword search</p>
+      <p id="search-deeplink-status" class="deeplink-status" hidden></p>
       <div class="scrollable">
         <ul id="search-results" class="result-list">
-          <li class="placeholder">Enter a query above</li>
+          <li class="placeholder">Enter a keyword or phrase to search your vault</li>
         </ul>
       </div>
     </section>
@@ -69,6 +74,7 @@
     <section class="panel" id="panel-vault">
       <h2>Vault Browser</h2>
       <input type="text" id="vault-filter" placeholder="Filter notes...">
+      <p id="vault-deeplink-status" class="deeplink-status" hidden></p>
       <div class="scrollable">
         <ul id="vault-notes" class="note-list">
           <li class="placeholder">Loading notes...</li>

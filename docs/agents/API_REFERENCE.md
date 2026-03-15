@@ -369,7 +369,35 @@ Classify whether a user message requires personal knowledge retrieval. Returns a
 
 **Errors**: 422 (Pydantic validation detail — invalid parameters)
 
-### 10. Health Check — `GET /health`
+### 10. Vault Config — `GET /config/vault`
+
+Resolve the vault name used for Obsidian URI deep links.
+
+**Response** (200):
+```json
+{
+  "vault_name": "my-obsidian-workspace",
+  "is_configured": true,
+  "message": null
+}
+```
+
+When vault configuration cannot be resolved:
+```json
+{
+  "vault_name": "",
+  "is_configured": false,
+  "message": "Obsidian deep links are unavailable. Set OBSIDIAN_VAULT_NAME or configure OBSIDIAN_VAULT_PATH to a valid vault directory."
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `vault_name` | string | Vault name to use in `obsidian://open` URIs |
+| `is_configured` | bool | Whether deep links are currently usable |
+| `message` | string or null | Optional user-facing troubleshooting guidance |
+
+### 11. Health Check — `GET /health`
 
 Verify the service is running.
 

@@ -51,6 +51,17 @@ It shows real-time service health, index statistics, recent file watcher events,
 a search playground for testing queries, and a vault browser with note link
 exploration. The dashboard auto-refreshes every 5 seconds.
 
+Dashboard search UX includes:
+
+- Instant keyword search with 300ms debounce
+- `Cmd/Ctrl+K` shortcut to focus search
+- Result count + search latency feedback
+- One-click **Open in Obsidian** links from search results, vault notes, and link relations
+
+If deep links are unavailable, the dashboard shows an inline warning with setup guidance.
+In the Vault Browser, use `Show links` to inspect backlinks/outlinks and the
+`Open` chip to launch Obsidian.
+
 ## Port Configuration
 
 All host-facing ports are configurable via environment variables to avoid conflicts
@@ -58,6 +69,7 @@ with other services on the same machine. Defaults match the standard ports:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `OBSIDIAN_VAULT_NAME` | _(derived from `OBSIDIAN_VAULT_PATH`)_ | Optional override for Obsidian deep-link vault name |
 | `SBI_API_PORT` | `8000` | Backend API port |
 | `SBI_QDRANT_HTTP_PORT` | `6333` | Qdrant HTTP / dashboard port |
 | `SBI_QDRANT_GRPC_PORT` | `6334` | Qdrant gRPC port |
@@ -151,6 +163,7 @@ Run `make help` to see this list at any time.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Service health check |
+| `GET` | `/config/vault` | Resolve vault name used by Obsidian deep links |
 | `POST` | `/augment` | **Recommended** — classify intent, retrieve context, return augmented prompt |
 | `POST` | `/search` | Semantic + keyword hybrid search (raw results) |
 | `POST` | `/note/suggest-links` | Suggest wikilinks and tags for draft note content |

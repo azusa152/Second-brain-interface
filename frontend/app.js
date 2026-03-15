@@ -5,6 +5,7 @@
   "use strict";
 
   const POLL_INTERVAL = 5000;
+  const SEARCH_DEBOUNCE_MS = 300;
 
   // ---------------------------------------------------------------------------
   // DOM references
@@ -22,10 +23,14 @@
     eventsList:     $("events-list"),
     searchForm:     $("search-form"),
     searchInput:    $("search-input"),
+    searchClear:    $("search-clear"),
     searchTopK:     $("search-top-k"),
     searchTopKVal:  $("search-top-k-value"),
+    searchMeta:     $("search-meta"),
+    searchDeepLinkStatus: $("search-deeplink-status"),
     searchResults:  $("search-results"),
     vaultFilter:    $("vault-filter"),
+    vaultDeepLinkStatus: $("vault-deeplink-status"),
     vaultNotes:     $("vault-notes"),
     vaultLinks:     $("vault-links"),
     linksTitle:     $("links-title"),
@@ -34,6 +39,12 @@
     rebuildBtn:     $("rebuild-btn"),
     rebuildResult:  $("rebuild-result"),
   };
+  let vaultName = "";
+  let deepLinksConfigured = false;
+  let deepLinkMessage = "";
+  let allNotes = [];
+  let latestSearchToken = 0;
+  let searchDebounceTimer = null;
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -61,12 +72,115 @@
   }
 
   function escapeAttr(str) {
-    return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    return String(str).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   }
 
   function truncate(str, len) {
     if (!str) return "";
     return str.length > len ? str.slice(0, len) + "..." : str;
+  }
+
+  function pluralize(count, singular, plural) {
+    return count === 1 ? singular : plural;
+  }
+
+  function normalizeNotePathForObsidian(notePath) {
+    if (!notePath) return "";
+    return notePath.toLowerCase().endsWith(".md") ? notePath.slice(0, -3) : notePath;
+  }
+
+  function buildObsidianUri(notePath) {
+    if (!vaultName) return "";
+    const filePath = normalizeNotePathForObsidian(notePath);
+    if (!filePath) return "";
+    return (
+      "obsidian://open?vault=" +
+      encodeURIComponent(vaultName) +
+      "&file=" +
+      encodeURIComponent(filePath)
+    );
+  }
+
+  function openInObsidianLink(notePath, className) {
+    const uri = buildObsidianUri(notePath);
+    if (!uri) {
+      return '<span class="' + className + ' obsidian-open-disabled" title="Vault name unavailable">Unavailable</span>';
+    }
+    return (
+      '<a class="' +
+      className +
+      '" href="' +
+      escapeAttr(uri) +
+      '" title="Open in Obsidian" aria-label="Open in Obsidian">Open</a>'
+    );
+  }
+
+  function noteLinkHtml(notePath, noteTitle, className) {
+    const uri = buildObsidianUri(notePath);
+    const safeTitle = escapeHtml(noteTitle || notePath || "Untitled note");
+    if (!uri) {
+      return '<span class="' + className + ' obsidian-open-disabled">' + safeTitle + "</span>";
+    }
+    return (
+      '<a class="' +
+      className +
+      '" href="' +
+      escapeAttr(uri) +
+      '" title="Open in Obsidian" aria-label="Open in Obsidian">' +
+      safeTitle +
+      "</a>"
+    );
+  }
+
+  function renderDeepLinkStatus() {
+    if (deepLinksConfigured) {
+      dom.searchDeepLinkStatus.hidden = true;
+      dom.searchDeepLinkStatus.textContent = "";
+      dom.vaultDeepLinkStatus.hidden = true;
+      dom.vaultDeepLinkStatus.textContent = "";
+      return;
+    }
+    const message =
+      deepLinkMessage ||
+      "Obsidian deep links are unavailable. Set OBSIDIAN_VAULT_NAME or verify OBSIDIAN_VAULT_PATH.";
+    dom.searchDeepLinkStatus.hidden = false;
+    dom.searchDeepLinkStatus.textContent = message;
+    dom.vaultDeepLinkStatus.hidden = false;
+    dom.vaultDeepLinkStatus.textContent = message;
+  }
+
+  function setSearchMeta(message) {
+    dom.searchMeta.textContent = message;
+  }
+
+  function renderSearchIdleState() {
+    dom.searchResults.innerHTML = '<li class="placeholder">Enter a keyword or phrase to search your vault</li>';
+    setSearchMeta("Ready for keyword search");
+  }
+
+  function toggleSearchClearButton() {
+    dom.searchClear.hidden = dom.searchInput.value.length === 0;
+  }
+
+  async function loadVaultConfig() {
+    try {
+      const resp = await fetch("/config/vault");
+      if (!resp.ok) {
+        deepLinksConfigured = false;
+        deepLinkMessage = "Obsidian deep links are unavailable because vault configuration could not be loaded.";
+        renderDeepLinkStatus();
+        return;
+      }
+      const data = await resp.json();
+      vaultName = (data.vault_name || "").trim();
+      deepLinksConfigured = Boolean(data.is_configured && vaultName);
+      deepLinkMessage = data.message || "";
+    } catch {
+      vaultName = "";
+      deepLinksConfigured = false;
+      deepLinkMessage = "Obsidian deep links are unavailable because dashboard could not reach /config/vault.";
+    }
+    renderDeepLinkStatus();
   }
 
   // ---------------------------------------------------------------------------
@@ -151,13 +265,17 @@
     dom.searchTopKVal.textContent = this.value;
   });
 
-  dom.searchForm.addEventListener("submit", async function (e) {
-    e.preventDefault();
-    const query = dom.searchInput.value.trim();
-    if (!query) return;
+  async function performSearch(rawQuery) {
+    const query = rawQuery.trim();
+    const searchToken = ++latestSearchToken;
+    if (!query) {
+      renderSearchIdleState();
+      return;
+    }
 
     const topK = parseInt(dom.searchTopK.value, 10);
-    dom.searchResults.innerHTML = '<li class="placeholder">Searching...</li>';
+    dom.searchResults.innerHTML = '<li class="placeholder"><span class="loading-spinner"></span> Searching...</li>';
+    setSearchMeta("Searching...");
 
     try {
       const resp = await fetch("/search", {
@@ -166,15 +284,32 @@
         body: JSON.stringify({ query: query, top_k: topK }),
       });
 
+      if (searchToken !== latestSearchToken) return;
+
       if (!resp.ok) {
         dom.searchResults.innerHTML = '<li class="placeholder">Search failed (' + resp.status + ')</li>';
+        setSearchMeta("Search request failed");
         return;
       }
 
       const data = await resp.json();
 
-      if (data.results.length === 0) {
-        dom.searchResults.innerHTML = '<li class="placeholder">No results found</li>';
+      if (searchToken !== latestSearchToken) return;
+
+      const resultCount = data.results.length;
+      const roundedTime = Math.round(data.search_time_ms);
+      setSearchMeta(
+        resultCount +
+          " " +
+          pluralize(resultCount, "result", "results") +
+          " in " +
+          roundedTime +
+          "ms"
+      );
+
+      if (resultCount === 0) {
+        dom.searchResults.innerHTML =
+          '<li class="placeholder">No matches found. Try broader keywords or check spelling.</li>';
         return;
       }
 
@@ -182,11 +317,17 @@
         .map((r) => {
           const score = r.score.toFixed(4);
           const snippet = escapeHtml(truncate(r.content, 200));
-          const heading = r.heading_context ? ' &mdash; ' + escapeHtml(r.heading_context) : '';
+          const heading = r.heading_context ? '<span class="result-heading"> - ' + escapeHtml(r.heading_context) + '</span>' : "";
           return (
-            '<li>' +
+            '<li class="result-item">' +
               '<span class="result-score">score ' + score + '</span>' +
-              '<div class="result-title">' + escapeHtml(r.note_title) + heading + '</div>' +
+              '<div class="result-title-row">' +
+                '<div class="result-title">' +
+                  noteLinkHtml(r.note_path, r.note_title, "obsidian-note-link") +
+                  heading +
+                '</div>' +
+                openInObsidianLink(r.note_path, "obsidian-open-link") +
+              '</div>' +
               '<div class="result-path">' + escapeHtml(r.note_path) + '</div>' +
               '<div class="result-snippet">' + snippet + '</div>' +
             '</li>'
@@ -194,15 +335,62 @@
         })
         .join("");
     } catch {
+      if (searchToken !== latestSearchToken) return;
       dom.searchResults.innerHTML = '<li class="placeholder">Network error</li>';
+      setSearchMeta("Could not reach search service");
+    }
+  }
+
+  function scheduleSearch() {
+    clearTimeout(searchDebounceTimer);
+    const query = dom.searchInput.value.trim();
+    if (!query) {
+      latestSearchToken++;
+      renderSearchIdleState();
+      return;
+    }
+    searchDebounceTimer = setTimeout(function () {
+      performSearch(query);
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  dom.searchInput.addEventListener("input", function () {
+    toggleSearchClearButton();
+    scheduleSearch();
+  });
+
+  dom.searchClear.addEventListener("click", function () {
+    dom.searchInput.value = "";
+    latestSearchToken++;
+    clearTimeout(searchDebounceTimer);
+    toggleSearchClearButton();
+    renderSearchIdleState();
+    dom.searchInput.focus();
+  });
+
+  dom.searchForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    clearTimeout(searchDebounceTimer);
+    await performSearch(dom.searchInput.value);
+  });
+
+  dom.searchTopK.addEventListener("change", function () {
+    if (dom.searchInput.value.trim()) {
+      performSearch(dom.searchInput.value);
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      dom.searchInput.focus();
+      dom.searchInput.select();
     }
   });
 
   // ---------------------------------------------------------------------------
   // Vault Browser
   // ---------------------------------------------------------------------------
-  let allNotes = [];
-
   async function loadNotes() {
     try {
       const resp = await fetch("/index/notes");
@@ -224,8 +412,12 @@
     dom.vaultNotes.innerHTML = notes
       .map((n) =>
         '<li data-path="' + escapeAttr(n.note_path) + '">' +
-          escapeHtml(n.note_title || n.note_path) +
-          '<span class="note-path">' + escapeHtml(n.note_path) + '</span>' +
+          '<div class="note-row-main">' +
+            '<span class="note-title">' + escapeHtml(n.note_title || n.note_path) + '</span>' +
+            '<span class="note-path">' + escapeHtml(n.note_path) + '</span>' +
+          "</div>" +
+          '<button type="button" class="note-inspect-btn" data-action="show-links" aria-label="Show links for ' + escapeAttr(n.note_title || n.note_path) + '">Show links</button>' +
+          openInObsidianLink(n.note_path, "obsidian-open-link") +
         '</li>'
       )
       .join("");
@@ -246,6 +438,9 @@
   });
 
   dom.vaultNotes.addEventListener("click", async function (e) {
+    if (e.target.closest("a")) return;
+    const showLinksBtn = e.target.closest('button[data-action="show-links"]');
+    if (!showLinksBtn) return;
     const li = e.target.closest("li[data-path]");
     if (!li) return;
     const path = li.dataset.path;
@@ -269,11 +464,25 @@
       const data = await resp.json();
 
       dom.linksOutlinks.innerHTML = data.outlinks.length
-        ? data.outlinks.map((l) => "<li>" + escapeHtml(l.note_title || l.note_path) + "</li>").join("")
+        ? data.outlinks
+            .map(
+              (l) =>
+                "<li>" +
+                noteLinkHtml(l.note_path, l.note_title || l.note_path, "obsidian-note-link") +
+                "</li>"
+            )
+            .join("")
         : "<li>none</li>";
 
       dom.linksBacklinks.innerHTML = data.backlinks.length
-        ? data.backlinks.map((l) => "<li>" + escapeHtml(l.note_title || l.note_path) + "</li>").join("")
+        ? data.backlinks
+            .map(
+              (l) =>
+                "<li>" +
+                noteLinkHtml(l.note_path, l.note_title || l.note_path, "obsidian-note-link") +
+                "</li>"
+            )
+            .join("")
         : "<li>none</li>";
     } catch {
       dom.linksOutlinks.innerHTML = "<li>error</li>";
@@ -323,9 +532,17 @@
     await Promise.all([pollHealth(), pollIndexStatus(), pollEvents()]);
   }
 
+  async function init() {
+    await loadVaultConfig();
+    renderDeepLinkStatus();
+    toggleSearchClearButton();
+    renderSearchIdleState();
+    await pollAll();
+    await loadNotes();
+  }
+
   // Initial load
-  pollAll();
-  loadNotes();
+  init();
 
   // Start polling
   setInterval(pollAll, POLL_INTERVAL);

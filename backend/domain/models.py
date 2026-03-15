@@ -134,6 +134,17 @@ class HealthResponse(BaseModel):
     timestamp: str
 
 
+# --- Config ---
+
+
+class VaultConfig(BaseModel):
+    """Response from GET /config/vault."""
+
+    vault_name: str
+    is_configured: bool
+    message: str | None = None
+
+
 # --- Index Status ---
 
 

@@ -53,6 +53,10 @@ Response when no personal context needed:
 ### B — Raw search (when you need direct results)
 
 1. `POST /search` with `{"query": "<query>", "top_k": 5}`
+2. If you want to open a result in Obsidian, call `GET /config/vault` and build:
+   `obsidian://open?vault=<vault_name>&file=<note_path_without_md>`
+3. If `/config/vault` returns `is_configured: false`, show the returned `message`
+   and ask the user to set `OBSIDIAN_VAULT_NAME` (or fix `OBSIDIAN_VAULT_PATH`).
 
 ```json
 POST /search
@@ -114,6 +118,7 @@ created_by: openclaw
 |--------|------|-------------|
 | `POST` | `/augment` | **Primary** — classify intent, retrieve context, return augmented prompt |
 | `POST` | `/search` | Hybrid semantic + keyword search (raw results) |
+| `GET` | `/config/vault` | Resolve vault name for Obsidian URI deep links |
 | `POST` | `/note/suggest-links` | Suggest wikilinks and tags for draft note content |
 | `POST` | `/index/rebuild` | Trigger full vault re-index |
 | `GET` | `/index/status` | Index health and statistics |
