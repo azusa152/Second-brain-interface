@@ -116,12 +116,14 @@ def get_search_service() -> SearchService:
     """Return the singleton SearchService, creating it on first call."""
     global _search_service, _embedder, _qdrant  # noqa: PLW0603
     if _search_service is None:
+        settings = get_settings()
         _embedder = _embedder or EmbeddingService()
         _qdrant = _qdrant or QdrantAdapter()
 
         _search_service = SearchService(
             embedder=_embedder,
             qdrant_adapter=_qdrant,
+            include_query_text_in_logs=settings.log_include_query_text,
         )
         logger.info("Initialized SearchService")
 

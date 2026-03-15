@@ -2,17 +2,20 @@ import os
 import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.augment_routes import router as augment_router
+from backend.api.config_routes import router as config_router
 from backend.api.dependencies import get_index_service, get_scheduler, initialize_services
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
 from backend.api.intent_routes import router as intent_router
+from backend.api.middleware import AccessLogMiddleware, RequestIDMiddleware
 from backend.api.note_routes import router as note_router
 from backend.api.search_routes import router as search_router
 from backend.application.index_service import IndexService
@@ -20,6 +23,8 @@ from backend.config import get_settings
 from backend.logging_config import get_logger, setup_logging
 
 setup_logging()
+_settings = get_settings()
+setup_logging(log_level=_settings.log_level, json_output=_settings.log_format == "json")
 logger = get_logger(__name__)
 
 
@@ -74,8 +79,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(AccessLogMiddleware, skip_paths={"/health"})
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(health_router)
+app.include_router(config_router)
 app.include_router(index_router)
 app.include_router(search_router)
 app.include_router(note_router)
@@ -96,7 +104,16 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles with no-cache to force browser revalidation."""
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+
 # Mount dashboard static files AFTER API routers (StaticFiles is a catch-all).
 _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.isdir(_frontend_dir):
-    app.mount("/dashboard", StaticFiles(directory=_frontend_dir, html=True))
+    app.mount("/dashboard", NoCacheStaticFiles(directory=_frontend_dir, html=True))

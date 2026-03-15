@@ -51,6 +51,19 @@ It shows real-time service health, index statistics, recent file watcher events,
 a search playground for testing queries, and a vault browser with note link
 exploration. The dashboard auto-refreshes every 5 seconds.
 
+Dashboard search UX includes:
+
+- Instant keyword search with 300ms debounce
+- `Cmd/Ctrl+K` shortcut to focus search
+- Result count + search latency feedback
+- One-click **Open in Obsidian** links from search results, vault notes, and link relations
+
+If deep links are unavailable, the dashboard shows an inline warning with setup guidance.
+In the Vault Browser, use `Show links` to inspect backlinks/outlinks and the
+`Open` chip to launch Obsidian.
+When running in Docker, vault name detection uses your host `OBSIDIAN_VAULT_PATH`
+automatically, and `OBSIDIAN_VAULT_NAME` remains available as an explicit override.
+
 ## Port Configuration
 
 All host-facing ports are configurable via environment variables to avoid conflicts
@@ -58,6 +71,7 @@ with other services on the same machine. Defaults match the standard ports:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `OBSIDIAN_VAULT_NAME` | _(auto-derived from `OBSIDIAN_VAULT_PATH`)_ | Optional override for Obsidian deep-link vault name |
 | `SBI_API_PORT` | `8000` | Backend API port |
 | `SBI_QDRANT_HTTP_PORT` | `6333` | Qdrant HTTP / dashboard port |
 | `SBI_QDRANT_GRPC_PORT` | `6334` | Qdrant gRPC port |
@@ -79,6 +93,26 @@ Then restart the services:
 
 ```bash
 make restart
+```
+
+## Logging Configuration
+
+The backend uses structured logging with `structlog` and includes request
+correlation IDs for API tracing.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| `LOG_FORMAT` | `json` | Log output format (`json` for Docker/aggregation, `console` for local readability) |
+| `LOG_INCLUDE_QUERY_TEXT` | `false` | Include raw query text in logs. Keep disabled by default for privacy. |
+
+When `LOG_FORMAT=json`, each log line is machine-parseable and includes fields
+like `timestamp`, `level`, `logger`, and request-scoped `request_id`.
+
+```bash
+# Example: verbose local debugging with readable console output
+LOG_LEVEL=DEBUG
+LOG_FORMAT=console
 ```
 
 ## Local Development
@@ -151,6 +185,7 @@ Run `make help` to see this list at any time.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Service health check |
+| `GET` | `/config/vault` | Resolve vault name used by Obsidian deep links |
 | `POST` | `/augment` | **Recommended** — classify intent, retrieve context, return augmented prompt |
 | `POST` | `/search` | Semantic + keyword hybrid search (raw results) |
 | `POST` | `/note/suggest-links` | Suggest wikilinks and tags for draft note content |

@@ -154,3 +154,26 @@ class TestSearchResponseFormat:
 
         assert response.related_notes == []
         mock_qdrant.get_related_notes_batch.assert_not_called()
+
+
+class TestQueryLoggingFields:
+    def test_query_logging_fields_should_hide_raw_query_by_default(self) -> None:
+        service, _, _ = _make_search_service()
+
+        fields = service._query_logging_fields("sensitive query text")
+
+        assert "query" not in fields
+        assert fields["query_len"] == len("sensitive query text")
+        assert "query_hash" in fields
+
+    def test_query_logging_fields_should_include_query_when_enabled(self) -> None:
+        service, mock_embedder, mock_qdrant = _make_search_service()
+        service = SearchService(
+            embedder=mock_embedder,
+            qdrant_adapter=mock_qdrant,
+            include_query_text_in_logs=True,
+        )
+
+        fields = service._query_logging_fields("hello world", preview_length=5)
+
+        assert fields["query"] == "hello"

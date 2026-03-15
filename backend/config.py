@@ -5,9 +5,8 @@ and access configuration via the returned ``Settings`` instance rather than
 calling ``os.getenv`` directly.
 """
 
-import logging
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,8 +17,9 @@ from backend.domain.constants import (
     REBUILD_CRON_HOUR,
     REBUILD_CRON_MINUTE,
 )
+from backend.logging_config import get_logger
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(__name__)
 
 
 class Settings(BaseSettings):
@@ -41,9 +41,16 @@ class Settings(BaseSettings):
 
     # Vault
     obsidian_vault_path: str = "/vault"
+    obsidian_vault_name: str = ""
+    obsidian_host_vault_path: str = ""
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
+
+    # Logging
+    log_level: str = "INFO"
+    log_format: Literal["json", "console"] = "json"
+    log_include_query_text: bool = False
 
     # File watcher
     use_polling_observer: bool = False
@@ -103,6 +110,29 @@ class Settings(BaseSettings):
                 "Invalid REBUILD_CRON_MINUTE value %r; using default %d", v, REBUILD_CRON_MINUTE
             )
             return REBUILD_CRON_MINUTE
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _coerce_log_level(cls, v: Any) -> str:
+        if v is None:
+            return "INFO"
+        level = str(v).strip().upper()
+        allowed = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
+        if level not in allowed:
+            _logger.warning("Invalid LOG_LEVEL value %r; using default INFO", v)
+            return "INFO"
+        return level
+
+    @field_validator("log_format", mode="before")
+    @classmethod
+    def _coerce_log_format(cls, v: Any) -> str:
+        if v is None:
+            return "json"
+        fmt = str(v).strip().lower()
+        if fmt not in {"json", "console"}:
+            _logger.warning("Invalid LOG_FORMAT value %r; using default json", v)
+            return "json"
+        return fmt
 
 
 @lru_cache

@@ -73,7 +73,7 @@ class IndexService:
             polling_interval=self._polling_interval,
         )
         self._watcher.start()
-        logger.info("Watcher started for vault: %s", self._vault_path)
+        logger.info("watcher_started", vault_path=self._vault_path)
 
     def stop_watcher(self) -> None:
         """Stop the file watcher and cancel pending debounce timers."""
@@ -81,7 +81,7 @@ class IndexService:
             self._debouncer.cancel_all()
         if self._watcher is not None:
             self._watcher.stop()
-        logger.info("Watcher stopped")
+        logger.info("watcher_stopped")
 
     def _on_file_changed(self, note_path: str) -> None:
         """Handle a debounced file create/modify event."""
@@ -89,7 +89,7 @@ class IndexService:
         self._event_log.record(WatcherEvent(event_type=event_type, file_path=note_path))
         self._file_map.update_file(None, note_path)
         self.index_single_note(note_path)
-        logger.info("Watcher re-indexed (%s): %s", event_type, note_path)
+        logger.info("watcher_reindexed", event_type=event_type, note_path=note_path)
 
     def _on_file_deleted(self, note_path: str) -> None:
         """Handle a file delete event (immediate, not debounced)."""
@@ -135,10 +135,10 @@ class IndexService:
             self._last_indexed = datetime.now(tz=UTC)
 
             logger.info(
-                "Rebuild complete: %d notes, %d chunks in %.1fs",
-                notes_indexed,
-                chunks_created,
-                elapsed,
+                "rebuild_complete",
+                notes=notes_indexed,
+                chunks=chunks_created,
+                duration_s=round(elapsed, 1),
             )
             return IndexRebuildResponse(
                 status="success",
@@ -159,12 +159,12 @@ class IndexService:
         If no HashRegistry was provided, falls back to a full rebuild.
         """
         if self._hash_registry is None:
-            logger.info("No hash registry; falling back to full rebuild")
+            logger.info("incremental_rebuild_fallback_full", reason="missing_hash_registry")
             self.rebuild_index()
             return
 
         if not self._rebuild_lock.acquire(blocking=False):
-            logger.info("Incremental rebuild skipped: another rebuild is already running")
+            logger.info("incremental_rebuild_skipped", reason="rebuild_in_progress")
             return
 
         start_time = time.time()
@@ -211,11 +211,11 @@ class IndexService:
 
             elapsed = time.time() - start_time
             logger.info(
-                "Incremental rebuild: %d changed, %d skipped, %d deleted in %.1fs",
-                changed,
-                skipped,
-                deleted,
-                elapsed,
+                "incremental_rebuild_complete",
+                changed=changed,
+                skipped=skipped,
+                deleted=deleted,
+                duration_s=round(elapsed, 1),
             )
         except Exception:
             logger.exception("Incremental rebuild failed")
@@ -240,7 +240,7 @@ class IndexService:
         self._qdrant.delete_by_note_path(note_path)
         self._qdrant.delete_links_by_source(note_path)
         self._file_map.remove_file(note_path)
-        logger.info("Deleted note from index: %s", note_path)
+        logger.info("note_deleted_from_index", note_path=note_path)
 
     def rename_note(self, old_path: str, new_path: str) -> None:
         """Handle file rename/move operation."""
@@ -248,7 +248,7 @@ class IndexService:
         self._qdrant.delete_links_by_source(old_path)
         self._file_map.update_file(old_path, new_path)
         self.index_single_note(new_path)
-        logger.info("Renamed note in index: %s -> %s", old_path, new_path)
+        logger.info("note_renamed_in_index", old_path=old_path, new_path=new_path)
 
     def get_recent_events(self, limit: int = 50) -> list[WatcherEvent]:
         """Return the most recent watcher events, newest first."""

@@ -24,6 +24,15 @@ Use `make` commands to control the service lifecycle:
 - **Index must be built first**: Before searching, trigger a full index rebuild via `POST /index/rebuild`. The file watcher keeps the index updated after the initial build.
 - **Local only**: All processing (embedding, indexing, search) happens on the user's machine. No external API calls.
 
+## Request Correlation and Logging
+
+- Send `X-Request-ID` on incoming requests to correlate API, application, and infrastructure logs.
+- If missing, the backend generates a request ID and returns it in the response header.
+- Logging environment variables:
+  - `LOG_LEVEL` (default `INFO`)
+  - `LOG_FORMAT` (default `json`; supports `json` or `console`)
+  - `LOG_INCLUDE_QUERY_TEXT` (default `false`; keep disabled for privacy)
+
 ## Endpoints
 
 > **Recommended primary endpoint**: Use `POST /augment` for most agent interactions.
@@ -369,7 +378,35 @@ Classify whether a user message requires personal knowledge retrieval. Returns a
 
 **Errors**: 422 (Pydantic validation detail — invalid parameters)
 
-### 10. Health Check — `GET /health`
+### 10. Vault Config — `GET /config/vault`
+
+Resolve the vault name used for Obsidian URI deep links.
+
+**Response** (200):
+```json
+{
+  "vault_name": "my-obsidian-workspace",
+  "is_configured": true,
+  "message": null
+}
+```
+
+When vault configuration cannot be resolved:
+```json
+{
+  "vault_name": "",
+  "is_configured": false,
+  "message": "Obsidian deep links are unavailable. Set OBSIDIAN_VAULT_NAME or configure OBSIDIAN_VAULT_PATH to a valid vault directory."
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `vault_name` | string | Vault name to use in `obsidian://open` URIs |
+| `is_configured` | bool | Whether deep links are currently usable |
+| `message` | string or null | Optional user-facing troubleshooting guidance |
+
+### 11. Health Check — `GET /health`
 
 Verify the service is running.
 
