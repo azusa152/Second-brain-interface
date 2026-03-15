@@ -536,7 +536,9 @@
     await loadVaultConfig();
     renderDeepLinkStatus();
     toggleSearchClearButton();
-    renderSearchIdleState();
+    if (!dom.searchInput.value.trim()) {
+      renderSearchIdleState();
+    }
     await pollAll();
     await loadNotes();
   }

@@ -8,6 +8,8 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - OBSIDIAN_VAULT_PATH=/vault
+      - OBSIDIAN_VAULT_NAME=${OBSIDIAN_VAULT_NAME:-}
+      - OBSIDIAN_HOST_VAULT_PATH=${OBSIDIAN_VAULT_PATH:-./_vault}
       - USE_POLLING_OBSERVER=true
       - HASH_REGISTRY_DATA_PATH=/data
       - SCHEDULED_REBUILD_ENABLED=true

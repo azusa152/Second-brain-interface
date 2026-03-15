@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # Vault
     obsidian_vault_path: str = "/vault"
     obsidian_vault_name: str = ""
+    obsidian_host_vault_path: str = ""
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"

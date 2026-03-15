@@ -39,6 +39,60 @@ def test_vault_config_should_derive_name_from_vault_path(
     config_module.get_settings.cache_clear()
 
 
+def test_vault_config_should_derive_name_from_host_vault_path_in_docker(
+    client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.delenv("OBSIDIAN_VAULT_NAME", raising=False)
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "/vault")
+    monkeypatch.setenv("OBSIDIAN_HOST_VAULT_PATH", "/Users/test/MyBrain")
+    config_module.get_settings.cache_clear()
+
+    response = client.get("/config/vault")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["vault_name"] == "MyBrain"
+    assert body["is_configured"] is True
+    assert body["message"] is None
+    config_module.get_settings.cache_clear()
+
+
+def test_vault_config_should_prefer_explicit_name_over_host_path(
+    client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.setenv("OBSIDIAN_VAULT_NAME", "ExplicitVault")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "/vault")
+    monkeypatch.setenv("OBSIDIAN_HOST_VAULT_PATH", "/Users/test/HostDerivedVault")
+    config_module.get_settings.cache_clear()
+
+    response = client.get("/config/vault")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["vault_name"] == "ExplicitVault"
+    assert body["is_configured"] is True
+    assert body["message"] is None
+    config_module.get_settings.cache_clear()
+
+
+def test_vault_config_should_derive_name_from_windows_style_host_path(
+    client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.delenv("OBSIDIAN_VAULT_NAME", raising=False)
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", "/vault")
+    monkeypatch.setenv("OBSIDIAN_HOST_VAULT_PATH", "C:\\Users\\test\\MyWindowsVault")
+    config_module.get_settings.cache_clear()
+
+    response = client.get("/config/vault")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["vault_name"] == "MyWindowsVault"
+    assert body["is_configured"] is True
+    assert body["message"] is None
+    config_module.get_settings.cache_clear()
+
+
 def test_vault_config_should_return_not_configured_for_nonexistent_path(
     client: TestClient, monkeypatch
 ) -> None:

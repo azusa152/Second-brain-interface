@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.augment_routes import router as augment_router
@@ -98,7 +98,16 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles with no-cache to force browser revalidation."""
+
+    def file_response(self, *args, **kwargs) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+
 # Mount dashboard static files AFTER API routers (StaticFiles is a catch-all).
 _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.isdir(_frontend_dir):
-    app.mount("/dashboard", StaticFiles(directory=_frontend_dir, html=True))
+    app.mount("/dashboard", NoCacheStaticFiles(directory=_frontend_dir, html=True))

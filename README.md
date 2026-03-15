@@ -61,6 +61,8 @@ Dashboard search UX includes:
 If deep links are unavailable, the dashboard shows an inline warning with setup guidance.
 In the Vault Browser, use `Show links` to inspect backlinks/outlinks and the
 `Open` chip to launch Obsidian.
+When running in Docker, vault name detection uses your host `OBSIDIAN_VAULT_PATH`
+automatically, and `OBSIDIAN_VAULT_NAME` remains available as an explicit override.
 
 ## Port Configuration
 
@@ -69,7 +71,7 @@ with other services on the same machine. Defaults match the standard ports:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OBSIDIAN_VAULT_NAME` | _(derived from `OBSIDIAN_VAULT_PATH`)_ | Optional override for Obsidian deep-link vault name |
+| `OBSIDIAN_VAULT_NAME` | _(auto-derived from `OBSIDIAN_VAULT_PATH`)_ | Optional override for Obsidian deep-link vault name |
 | `SBI_API_PORT` | `8000` | Backend API port |
 | `SBI_QDRANT_HTTP_PORT` | `6333` | Qdrant HTTP / dashboard port |
 | `SBI_QDRANT_GRPC_PORT` | `6334` | Qdrant gRPC port |
