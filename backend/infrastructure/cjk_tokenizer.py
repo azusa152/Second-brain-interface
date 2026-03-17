@@ -7,14 +7,16 @@ fastembed's BM25 model, which assumes whitespace-delimited tokens.
 - Chinese: word segmentation via jieba with POS-based stopword removal
 - Non-CJK: passed through unchanged
 
-POS filtering is applied ONLY for sparse/BM25 indexing.  Dense embeddings
-receive the full original text so the neural model retains grammatical context.
+POS filtering is applied ONLY for sparse/BM25 indexing. Dense embeddings
+receive NFKC-normalized text (plus invisible-character sanitization) with no
+POS filtering so the neural model retains grammatical context.
 """
 
 from __future__ import annotations
 
 import re
 import unicodedata
+from typing import Any
 
 from backend.logging_config import get_logger
 
@@ -35,6 +37,15 @@ _CJK_UNIFIED = re.compile(
 _JAPANESE_KANA = re.compile(
     r"[\u3040-\u309f"  # Hiragana
     r"\u30a0-\u30ff"  # Katakana
+    r"]"
+)
+
+_INVISIBLE_RE = re.compile(
+    r"[\u200b\u200c\u200d\u200e\u200f"  # zero-width space/joiner/marks
+    r"\ufeff"  # BOM
+    r"\u00ad"  # soft hyphen
+    r"\u2060\u2061\u2062\u2063"  # word joiner, invisible operators
+    r"\u180e"  # Mongolian vowel separator
     r"]"
 )
 
@@ -103,9 +114,22 @@ def _is_chinese(text: str) -> bool:
     return _has_cjk(text) and not _has_japanese_kana(text)
 
 
+def _strip_invisible(text: str) -> str:
+    """Remove invisible Unicode characters that can corrupt tokenization."""
+    return _INVISIBLE_RE.sub("", text)
+
+
+def _normalize_and_sanitize(text: str) -> tuple[str, str]:
+    """Return (NFKC normalized text, sanitized text)."""
+    normalized = unicodedata.normalize("NFKC", text)
+    sanitized = _strip_invisible(normalized)
+    return normalized, sanitized
+
+
 def nfkc_normalize(text: str) -> str:
-    """Normalize full-width characters to half-width (e.g. Ａ→A, １→1)."""
-    return unicodedata.normalize("NFKC", text)
+    """Normalize full-width characters and strip invisible Unicode artifacts."""
+    _, sanitized = _normalize_and_sanitize(text)
+    return sanitized
 
 
 # ---------------------------------------------------------------------------
@@ -167,37 +191,14 @@ def _ensure_jieba() -> bool:
 
 def _tokenize_japanese(text: str) -> str:
     """Segment Japanese text with Sudachi, keeping only content-word POS."""
-    if not _ensure_sudachi():
-        return text
-
-    assert _sudachi_tokenizer is not None
-    assert _sudachi_split_mode is not None
-
-    morphemes = _sudachi_tokenizer.tokenize(text, _sudachi_split_mode)
-    tokens: list[str] = []
-    for m in morphemes:
-        pos = m.part_of_speech()
-        if pos[0] in _JA_CONTENT_POS:
-            # Use normalized form for orthographic consistency (サーバー → サーバー)
-            normalized = m.normalized_form()
-            if normalized.strip():
-                tokens.append(normalized)
-    return " ".join(tokens)
+    tokenized, _ = _tokenize_japanese_with_details(text, collect_debug=False)
+    return tokenized
 
 
 def _tokenize_chinese(text: str) -> str:
     """Segment Chinese text with jieba, removing function-word POS tags."""
-    if not _ensure_jieba():
-        return text
-
-    import jieba.posseg as pseg
-
-    tokens: list[str] = []
-    for word, flag in pseg.cut(text):
-        # Keep "eng" tokens (English words) even though they start with "e".
-        if not _is_zh_function_pos(flag) and word.strip():
-            tokens.append(word)
-    return " ".join(tokens)
+    tokenized, _ = _tokenize_chinese_with_details(text, collect_debug=False)
+    return tokenized
 
 
 def _is_zh_function_pos(flag: str) -> bool:
@@ -214,28 +215,132 @@ def tokenize_for_sparse(text: str) -> str:
     POS-based stopword removal.  Non-CJK text is passed through after
     normalization only (fastembed's BM25 tokenizer handles English well).
     """
-    text = nfkc_normalize(text)
+    _, text = _normalize_and_sanitize(text)
+    sparse_output, _, _, _ = _run_sparse_pipeline(text, collect_debug=False)
+    return sparse_output
 
-    if not (_has_cjk(text) or _has_japanese_kana(text)):
-        return text
 
-    # Split into CJK and non-CJK segments to handle mixed-language text.
-    # Process each CJK segment with the appropriate tokenizer,
-    # leave non-CJK segments unchanged.
-    segments = _split_cjk_segments(text)
+def _tokenize_japanese_with_details(
+    text: str, *, collect_debug: bool
+) -> tuple[str, list[dict[str, Any]]]:
+    """Segment Japanese text and optionally emit token-level details."""
+    if not _ensure_sudachi():
+        if not collect_debug:
+            return text, []
+        return text, [{"surface": text, "pos": "missing_sudachi", "kept": True, "language": "japanese"}]
+
+    assert _sudachi_tokenizer is not None
+    assert _sudachi_split_mode is not None
+
+    morphemes = _sudachi_tokenizer.tokenize(text, _sudachi_split_mode)
+    kept_tokens: list[str] = []
+    debug_tokens: list[dict[str, Any]] = []
+    for m in morphemes:
+        pos = m.part_of_speech()
+        primary_pos = pos[0]
+        kept = primary_pos in _JA_CONTENT_POS
+        surface = m.surface()
+        normalized = m.normalized_form()
+        if kept and normalized.strip():
+            kept_tokens.append(normalized)
+        if collect_debug:
+            debug_tokens.append(
+                {
+                    "surface": surface,
+                    "normalized": normalized,
+                    "pos": primary_pos,
+                    "kept": kept,
+                    "language": "japanese",
+                }
+            )
+    return " ".join(kept_tokens), debug_tokens
+
+
+def _tokenize_chinese_with_details(
+    text: str, *, collect_debug: bool
+) -> tuple[str, list[dict[str, Any]]]:
+    """Segment Chinese text and optionally emit token-level details."""
+    if not _ensure_jieba():
+        if not collect_debug:
+            return text, []
+        return text, [{"surface": text, "pos": "missing_jieba", "kept": True, "language": "chinese"}]
+
+    import jieba.posseg as pseg
+
+    kept_tokens: list[str] = []
+    debug_tokens: list[dict[str, Any]] = []
+    for word, flag in pseg.cut(text):
+        kept = (not _is_zh_function_pos(flag)) and bool(word.strip())
+        if kept:
+            kept_tokens.append(word)
+        if collect_debug:
+            debug_tokens.append(
+                {
+                    "surface": word,
+                    "pos": flag,
+                    "kept": kept,
+                    "language": "chinese",
+                }
+            )
+    return " ".join(kept_tokens), debug_tokens
+
+
+def _run_sparse_pipeline(
+    sanitized_text: str, *, collect_debug: bool
+) -> tuple[str, str, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Run shared sparse pipeline and optionally collect debug details."""
+    detected_language = "other"
+    if not (_has_cjk(sanitized_text) or _has_japanese_kana(sanitized_text)):
+        return sanitized_text, detected_language, [], []
+
+    segments = _split_cjk_segments(sanitized_text)
     processed: list[str] = []
+    segment_debug: list[dict[str, Any]] = []
+    token_debug: list[dict[str, Any]] = []
 
     for segment, is_cjk_segment in segments:
         if not is_cjk_segment:
+            if collect_debug:
+                segment_debug.append({"text": segment, "is_cjk": False, "language": "other"})
             processed.append(segment)
-        elif _is_japanese(segment):
-            processed.append(_tokenize_japanese(segment))
-        elif _is_chinese(segment):
-            processed.append(_tokenize_chinese(segment))
-        else:
-            processed.append(segment)
+            continue
 
-    return " ".join(part for part in processed if part.strip())
+        if _is_japanese(segment):
+            detected_language = "japanese"
+            tokenized, tokens = _tokenize_japanese_with_details(segment, collect_debug=collect_debug)
+            if collect_debug:
+                segment_debug.append({"text": segment, "is_cjk": True, "language": "japanese"})
+                token_debug.extend(tokens)
+            processed.append(tokenized)
+            continue
+
+        detected_language = "chinese"
+        tokenized, tokens = _tokenize_chinese_with_details(segment, collect_debug=collect_debug)
+        if collect_debug:
+            segment_debug.append({"text": segment, "is_cjk": True, "language": "chinese"})
+            token_debug.extend(tokens)
+        processed.append(tokenized)
+
+    sparse_output = " ".join(part for part in processed if part.strip())
+    return sparse_output, detected_language, segment_debug, token_debug
+
+
+def tokenize_for_sparse_debug(text: str) -> dict[str, Any]:
+    """Debug helper that returns tokenization output with intermediate details."""
+    normalized, sanitized = _normalize_and_sanitize(text)
+    sparse_output, detected_language, segments, tokens = _run_sparse_pipeline(
+        sanitized,
+        collect_debug=True,
+    )
+    return {
+        "original": text,
+        "normalized": normalized,
+        "sanitized": sanitized,
+        "segments": segments,
+        "tokens": tokens,
+        "detected_language": detected_language,
+        "sparse_output": sparse_output,
+    }
 
 
 # ---------------------------------------------------------------------------

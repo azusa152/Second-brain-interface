@@ -246,6 +246,45 @@ class IntentClassification(BaseModel):
     suggested_query: str | None
 
 
+# --- Debug Tokenization ---
+
+
+class TokenizeRequest(BaseModel):
+    """Request body for POST /debug/tokenize."""
+
+    text: str = Field(min_length=1)
+
+
+class TokenizeSegmentItem(BaseModel):
+    """A segmented text span used during debug tokenization."""
+
+    text: str
+    is_cjk: bool
+    language: Literal["japanese", "chinese", "other"]
+
+
+class TokenizeTokenItem(BaseModel):
+    """A token-level debug record from the tokenizer pipeline."""
+
+    surface: str
+    pos: str
+    kept: bool
+    language: Literal["japanese", "chinese"]
+    normalized: str | None = None
+
+
+class TokenizeResponse(BaseModel):
+    """Response from POST /debug/tokenize."""
+
+    original: str
+    normalized: str
+    sanitized: str
+    detected_language: Literal["japanese", "chinese", "other"]
+    segments: list[TokenizeSegmentItem]
+    sparse_output: str
+    tokens: list[TokenizeTokenItem]
+
+
 # --- Context Augmentation ---
 
 

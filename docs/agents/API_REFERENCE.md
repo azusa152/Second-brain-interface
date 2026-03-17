@@ -32,6 +32,7 @@ Use `make` commands to control the service lifecycle:
   - `LOG_LEVEL` (default `INFO`)
   - `LOG_FORMAT` (default `json`; supports `json` or `console`)
   - `LOG_INCLUDE_QUERY_TEXT` (default `false`; keep disabled for privacy)
+  - `DEBUG_ENDPOINTS` (default `false`; enables developer-only debug endpoints)
 
 ## Endpoints
 
@@ -406,7 +407,44 @@ When vault configuration cannot be resolved:
 | `is_configured` | bool | Whether deep links are currently usable |
 | `message` | string or null | Optional user-facing troubleshooting guidance |
 
-### 11. Health Check — `GET /health`
+### 11. Debug Tokenizer — `POST /debug/tokenize`
+
+Inspect CJK sparse tokenization behavior with intermediate normalization, segmentation, and token-level POS decisions. This endpoint is developer-only and returns `404` when `DEBUG_ENDPOINTS` is not enabled.
+
+**Request**:
+```json
+{
+  "text": "ＡＩ設計について"
+}
+```
+
+**Response** (200):
+```json
+{
+  "original": "ＡＩ設計について",
+  "normalized": "AI設計について",
+  "sanitized": "AI設計について",
+  "detected_language": "japanese",
+  "segments": [
+    {"text": "AI", "is_cjk": false, "language": "other"},
+    {"text": "設計について", "is_cjk": true, "language": "japanese"}
+  ],
+  "sparse_output": "AI 設計",
+  "tokens": [
+    {"surface": "設計", "pos": "名詞", "kept": true, "language": "japanese", "normalized": "設計"},
+    {"surface": "について", "pos": "助詞", "kept": false, "language": "japanese", "normalized": "について"}
+  ]
+}
+```
+
+**Errors**:
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `404` | `{"detail":"Not found"}` | Debug endpoints disabled (`DEBUG_ENDPOINTS=false`) |
+| `422` | Pydantic validation detail | Invalid request body |
+
+### 12. Health Check — `GET /health`
 
 Verify the service is running.
 

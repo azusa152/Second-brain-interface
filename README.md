@@ -105,6 +105,7 @@ correlation IDs for API tracing.
 | `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
 | `LOG_FORMAT` | `json` | Log output format (`json` for Docker/aggregation, `console` for local readability) |
 | `LOG_INCLUDE_QUERY_TEXT` | `false` | Include raw query text in logs. Keep disabled by default for privacy. |
+| `DEBUG_ENDPOINTS` | `false` | Enables developer-only debug APIs such as `POST /debug/tokenize`. |
 
 When `LOG_FORMAT=json`, each log line is machine-parseable and includes fields
 like `timestamp`, `level`, `logger`, and request-scoped `request_id`.
@@ -195,6 +196,7 @@ Run `make help` to see this list at any time.
 | `GET` | `/index/events` | Recent file watcher events |
 | `GET` | `/index/notes` | List all indexed notes |
 | `GET` | `/note/{path}/links` | Backlinks and outlinks for a note |
+| `POST` | `/debug/tokenize` | Developer-only tokenizer diagnostics (requires `DEBUG_ENDPOINTS=true`) |
 
 ### Augment a prompt with vault context
 

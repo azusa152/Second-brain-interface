@@ -31,6 +31,7 @@ description: Search and retrieve context from the user's Obsidian vault. Augment
 - `LOG_LEVEL` (`INFO` default): `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 - `LOG_FORMAT` (`json` default): `json` for machine parsing, `console` for local readability
 - `LOG_INCLUDE_QUERY_TEXT` (`false` default): keep disabled unless temporarily debugging sensitive query flows
+- `DEBUG_ENDPOINTS` (`false` default): enables developer-only debug APIs (e.g. `POST /debug/tokenize`)
 
 ## Workflows
 
@@ -138,6 +139,7 @@ created_by: openclaw
 | `GET` | `/index/notes` | List all indexed notes |
 | `GET` | `/note/{path}/links` | Backlinks and outlinks for a note |
 | `POST` | `/intent/classify` | Standalone intent classification |
+| `POST` | `/debug/tokenize` | Tokenizer diagnostics for CJK edge-case troubleshooting (`DEBUG_ENDPOINTS=true`) |
 | `GET` | `/health` | Service health check |
 
 ## Error Handling

@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"
     log_include_query_text: bool = False
+    debug_endpoints: bool = False
 
     # File watcher
     use_polling_observer: bool = False

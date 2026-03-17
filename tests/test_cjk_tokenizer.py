@@ -11,6 +11,7 @@ from backend.infrastructure.cjk_tokenizer import (
     count_words_cjk_aware,
     nfkc_normalize,
     tokenize_for_sparse,
+    tokenize_for_sparse_debug,
 )
 
 # ---------------------------------------------------------------------------
@@ -32,6 +33,10 @@ class TestNfkcNormalize:
     def test_should_normalize_fullwidth_katakana(self) -> None:
         result = nfkc_normalize("ﾃﾞｰﾀﾍﾞｰｽ")
         assert "データベース" == result
+
+    def test_should_strip_invisible_unicode_characters(self) -> None:
+        text = "設計\u200bレビュー\ufeff改善\u00ad"
+        assert nfkc_normalize(text) == "設計レビュー改善"
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +141,9 @@ class TestTokenizeForSparseEnglish:
     def test_should_normalize_fullwidth_in_english(self) -> None:
         assert tokenize_for_sparse("ＡＢＣ") == "ABC"
 
+    def test_should_strip_invisible_characters_in_non_cjk_text(self) -> None:
+        assert tokenize_for_sparse("API\u200b design\ufeff notes") == "API design notes"
+
 
 # ---------------------------------------------------------------------------
 # tokenize_for_sparse — Japanese (requires sudachi)
@@ -170,6 +178,11 @@ class TestTokenizeForSparseJapanese:
         result = tokenize_for_sparse("API設計について")
         assert "について" not in result
         assert "API" in result or "設計" in result
+
+    def test_should_keep_number_cjk_adjacency(self) -> None:
+        result = tokenize_for_sparse("2024年度レビュー")
+        assert "2024" in result
+        assert "年度" in result or "年" in result or "度" in result
 
     def test_should_gracefully_handle_missing_sudachi(self) -> None:
         """When SudachiPy is not installed, text should pass through."""
@@ -212,6 +225,20 @@ class TestTokenizeForSparseChinese:
         assert "Docker" in tokens
         assert "AI" in tokens
 
+    def test_should_keep_emoji_without_breaking_processing(self) -> None:
+        result = tokenize_for_sparse("数据库优化🔥方案")
+        assert "数据库" in result or "优化" in result or "方案" in result
+
+    def test_should_return_empty_when_only_filtered_function_words(self) -> None:
+        result = tokenize_for_sparse("的了呢吧")
+        assert result.strip() == ""
+
+    def test_should_handle_long_cjk_text_smoke(self) -> None:
+        text = "数据库设计优化" * 500
+        result = tokenize_for_sparse(text)
+        assert isinstance(result, str)
+        assert result
+
     def test_should_gracefully_handle_missing_jieba(self) -> None:
         """When jieba is not installed, text should pass through."""
         import backend.infrastructure.cjk_tokenizer as mod
@@ -220,3 +247,17 @@ class TestTokenizeForSparseChinese:
         result = tokenize_for_sparse("关于数据库设计的最佳实践")
         assert "关于" in result
         mod._jieba_available = None
+
+
+class TestDebugParity:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "database design patterns",
+            "データベース設計について",
+            "关于数据库设计的最佳实践",
+            "API設計について 2024年度レビュー",
+        ],
+    )
+    def test_debug_sparse_output_should_match_main_pipeline(self, text: str) -> None:
+        assert tokenize_for_sparse_debug(text)["sparse_output"] == tokenize_for_sparse(text)

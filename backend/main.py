@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.augment_routes import router as augment_router
 from backend.api.config_routes import router as config_router
+from backend.api.debug_routes import router as debug_router
 from backend.api.dependencies import get_index_service, get_scheduler, initialize_services
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
@@ -84,6 +85,8 @@ app.add_middleware(RequestIDMiddleware)
 
 app.include_router(health_router)
 app.include_router(config_router)
+if _settings.debug_endpoints:
+    app.include_router(debug_router)
 app.include_router(index_router)
 app.include_router(search_router)
 app.include_router(note_router)
