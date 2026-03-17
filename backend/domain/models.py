@@ -92,6 +92,10 @@ class SearchResponse(BaseModel):
         "Does not represent the total number of matches in the index."
     )
     search_time_ms: float
+    did_you_mean: str | None = Field(
+        default=None,
+        description="Suggested corrected query when fuzzy matching detects likely typos.",
+    )
 
 
 # --- Note Links ---

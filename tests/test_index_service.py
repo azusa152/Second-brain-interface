@@ -19,6 +19,7 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "test_vault")
 def _make_service(
     vault_path: str = FIXTURES_DIR,
     event_log: EventLog | None = None,
+    on_index_updated=None,
 ) -> tuple[IndexService, MagicMock, MagicMock]:
     """Create an IndexService with mocked Qdrant and embedding."""
     vault_file_map = VaultFileMap(vault_path)
@@ -40,6 +41,7 @@ def _make_service(
         qdrant_adapter=mock_qdrant,
         vault_file_map=vault_file_map,
         event_log=event_log,
+        on_index_updated=on_index_updated,
     )
     service.initialize()
     return service, mock_qdrant, mock_embedder
@@ -78,6 +80,7 @@ class TestRebuildIndex:
 def _make_service_with_registry(
     vault_path: str,
     data_dir: str,
+    on_index_updated=None,
 ) -> tuple[IndexService, MagicMock, MagicMock, HashRegistry]:
     """Create an IndexService wired with a real HashRegistry for incremental rebuild tests."""
     vault_file_map = VaultFileMap(vault_path)
@@ -103,6 +106,7 @@ def _make_service_with_registry(
         qdrant_adapter=mock_qdrant,
         vault_file_map=vault_file_map,
         hash_registry=hash_registry,
+        on_index_updated=on_index_updated,
     )
     service.initialize()
     return service, mock_qdrant, mock_embedder, hash_registry
@@ -261,6 +265,54 @@ class TestDeleteNote:
 
         mock_qdrant.delete_by_note_path.assert_called_once_with("note1.md")
         mock_qdrant.delete_links_by_source.assert_called_once_with("note1.md")
+
+
+class TestIndexUpdateCallback:
+    def test_rebuild_should_notify_callback_once(self) -> None:
+        callback = MagicMock()
+        service, _, mock_embedder = _make_service(on_index_updated=callback)
+        mock_embedder.embed_batch.side_effect = lambda texts: [[0.0] * 384 for _ in texts]
+        mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
+            MagicMock(indices=[1], values=[0.5]) for _ in texts
+        ]
+
+        service.rebuild_index()
+
+        callback.assert_called_once()
+
+    def test_incremental_rebuild_should_notify_only_when_changed(
+        self, temp_vault: str, data_dir: str
+    ) -> None:
+        callback = MagicMock()
+        service, _, _, _ = _make_service_with_registry(
+            temp_vault,
+            data_dir,
+            on_index_updated=callback,
+        )
+
+        service.incremental_rebuild()
+        callback.reset_mock()
+        service.incremental_rebuild()
+
+        callback.assert_not_called()
+
+    def test_index_single_note_should_notify_callback(self) -> None:
+        callback = MagicMock()
+        service, _, mock_embedder = _make_service(on_index_updated=callback)
+        mock_embedder.embed_batch.return_value = [[0.0] * 384]
+        mock_embedder.embed_batch_sparse.return_value = [MagicMock(indices=[1], values=[0.5])]
+
+        service.index_single_note("note1.md")
+
+        callback.assert_called_once()
+
+    def test_delete_note_should_notify_callback(self) -> None:
+        callback = MagicMock()
+        service, _, _ = _make_service(on_index_updated=callback)
+
+        service.delete_note("note1.md")
+
+        callback.assert_called_once()
 
 
 class TestRenameNote:

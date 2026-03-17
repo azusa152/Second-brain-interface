@@ -27,8 +27,11 @@
     searchTopK:     $("search-top-k"),
     searchTopKVal:  $("search-top-k-value"),
     searchMeta:     $("search-meta"),
+    searchDidYouMean: $("search-did-you-mean"),
     searchDeepLinkStatus: $("search-deeplink-status"),
     searchResults:  $("search-results"),
+    searchRelatedWrap: $("search-related-wrap"),
+    searchRelatedNotes: $("search-related-notes"),
     vaultFilter:    $("vault-filter"),
     vaultDeepLinkStatus: $("vault-deeplink-status"),
     vaultNotes:     $("vault-notes"),
@@ -155,6 +158,10 @@
 
   function renderSearchIdleState() {
     dom.searchResults.innerHTML = '<li class="placeholder">Enter a keyword or phrase to search your vault</li>';
+    dom.searchDidYouMean.hidden = true;
+    dom.searchDidYouMean.innerHTML = "";
+    dom.searchRelatedWrap.hidden = true;
+    dom.searchRelatedNotes.innerHTML = "";
     setSearchMeta("Ready for keyword search");
   }
 
@@ -265,6 +272,95 @@
     dom.searchTopKVal.textContent = this.value;
   });
 
+  function escapeRegExp(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function extractHighlightTerms(primaryQuery, secondaryQuery) {
+    const terms = new Set();
+    [primaryQuery, secondaryQuery]
+      .filter(Boolean)
+      .forEach((q) => {
+        const matches = String(q).match(/[A-Za-z0-9][A-Za-z0-9_-]*/g) || [];
+        matches.forEach((term) => {
+          if (term.length >= 2) terms.add(term.toLowerCase());
+        });
+      });
+    return Array.from(terms).sort((a, b) => b.length - a.length);
+  }
+
+  function renderHighlightedText(text, highlightTerms) {
+    if (!text) return "";
+    if (!highlightTerms || highlightTerms.length === 0) return escapeHtml(text);
+
+    const alternation = highlightTerms.map(escapeRegExp).join("|");
+    const regex = new RegExp(alternation, "ig");
+    const ranges = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (ranges.length === 0 || start > ranges[ranges.length - 1][1]) {
+        ranges.push([start, end]);
+      } else {
+        ranges[ranges.length - 1][1] = Math.max(ranges[ranges.length - 1][1], end);
+      }
+    }
+
+    if (ranges.length === 0) return escapeHtml(text);
+
+    let html = "";
+    let cursor = 0;
+    ranges.forEach(([start, end]) => {
+      html += escapeHtml(text.slice(cursor, start));
+      html += "<mark>" + escapeHtml(text.slice(start, end)) + "</mark>";
+      cursor = end;
+    });
+    html += escapeHtml(text.slice(cursor));
+    return html;
+  }
+
+  function renderDidYouMean(correctedQuery) {
+    if (!correctedQuery) {
+      dom.searchDidYouMean.hidden = true;
+      dom.searchDidYouMean.innerHTML = "";
+      return;
+    }
+    dom.searchDidYouMean.hidden = false;
+    dom.searchDidYouMean.innerHTML =
+      'Did you mean <button type="button" class="did-you-mean-action" data-query="' +
+      escapeAttr(correctedQuery) +
+      '">"' +
+      escapeHtml(correctedQuery) +
+      '"</button>?';
+  }
+
+  function renderRelatedNotes(relatedNotes) {
+    if (!relatedNotes || relatedNotes.length === 0) {
+      dom.searchRelatedWrap.hidden = true;
+      dom.searchRelatedNotes.innerHTML = "";
+      return;
+    }
+
+    dom.searchRelatedWrap.hidden = false;
+    dom.searchRelatedNotes.innerHTML = relatedNotes
+      .map((note) => {
+        const relation = note.relationship ? " (" + escapeHtml(note.relationship) + ")" : "";
+        const count = Number.isFinite(note.link_count) ? " x" + note.link_count : "";
+        return (
+          "<li>" +
+          noteLinkHtml(note.note_path, note.note_title, "obsidian-note-link") +
+          '<span class="related-meta">' +
+          relation +
+          count +
+          "</span>" +
+          openInObsidianLink(note.note_path, "obsidian-open-link") +
+          "</li>"
+        );
+      })
+      .join("");
+  }
+
   async function performSearch(rawQuery) {
     const query = rawQuery.trim();
     const searchToken = ++latestSearchToken;
@@ -275,6 +371,8 @@
 
     const topK = parseInt(dom.searchTopK.value, 10);
     dom.searchResults.innerHTML = '<li class="placeholder"><span class="loading-spinner"></span> Searching...</li>';
+    dom.searchDidYouMean.hidden = true;
+    dom.searchRelatedWrap.hidden = true;
     setSearchMeta("Searching...");
 
     try {
@@ -298,6 +396,7 @@
 
       const resultCount = data.results.length;
       const roundedTime = Math.round(data.search_time_ms);
+      const highlightTerms = extractHighlightTerms(query, data.did_you_mean);
       setSearchMeta(
         resultCount +
           " " +
@@ -306,6 +405,8 @@
           roundedTime +
           "ms"
       );
+      renderDidYouMean(data.did_you_mean);
+      renderRelatedNotes(data.related_notes || []);
 
       if (resultCount === 0) {
         dom.searchResults.innerHTML =
@@ -316,8 +417,15 @@
       dom.searchResults.innerHTML = data.results
         .map((r) => {
           const score = r.score.toFixed(4);
-          const snippet = escapeHtml(truncate(r.content, 200));
+          const fallbackSnippet = truncate(r.content, 200);
+          const snippets = (r.highlights && r.highlights.length ? r.highlights : [fallbackSnippet]).slice(0, 2);
+          const snippetHtml = snippets
+            .map((snippet) => '<li class="result-highlight">' + renderHighlightedText(snippet, highlightTerms) + "</li>")
+            .join("");
           const heading = r.heading_context ? '<span class="result-heading"> - ' + escapeHtml(r.heading_context) + '</span>' : "";
+          const tagsHtml = (r.tags || [])
+            .map((tag) => '<span class="result-tag">' + escapeHtml(tag) + "</span>")
+            .join("");
           return (
             '<li class="result-item">' +
               '<span class="result-score">score ' + score + '</span>' +
@@ -329,7 +437,8 @@
                 openInObsidianLink(r.note_path, "obsidian-open-link") +
               '</div>' +
               '<div class="result-path">' + escapeHtml(r.note_path) + '</div>' +
-              '<div class="result-snippet">' + snippet + '</div>' +
+              '<ul class="result-snippet-list">' + snippetHtml + '</ul>' +
+              (tagsHtml ? '<div class="result-tags">' + tagsHtml + '</div>' : "") +
             '</li>'
           );
         })
@@ -372,6 +481,16 @@
     e.preventDefault();
     clearTimeout(searchDebounceTimer);
     await performSearch(dom.searchInput.value);
+  });
+
+  dom.searchDidYouMean.addEventListener("click", function (e) {
+    const button = e.target.closest("button[data-query]");
+    if (!button) return;
+    const correctedQuery = button.dataset.query || "";
+    dom.searchInput.value = correctedQuery;
+    toggleSearchClearButton();
+    clearTimeout(searchDebounceTimer);
+    performSearch(correctedQuery);
   });
 
   dom.searchTopK.addEventListener("change", function () {

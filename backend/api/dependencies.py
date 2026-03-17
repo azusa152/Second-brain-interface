@@ -5,15 +5,22 @@ directly to ``Depends()``.  In tests, override via
 ``app.dependency_overrides[get_search_service] = lambda: mock``.
 """
 
+import threading
+
 from backend.application.augment_service import AugmentService
 from backend.application.index_service import IndexService
 from backend.application.intent_service import IntentService
 from backend.application.search_service import SearchService
 from backend.config import get_settings
-from backend.domain.constants import INTENT_DEFAULT_DOMAIN_ANCHORS, INTENT_DEFAULT_KEYWORDS
+from backend.domain.constants import (
+    FUZZY_REFRESH_DEBOUNCE_SECONDS,
+    INTENT_DEFAULT_DOMAIN_ANCHORS,
+    INTENT_DEFAULT_KEYWORDS,
+)
 from backend.infrastructure.chunker import Chunker
 from backend.infrastructure.embedding import EmbeddingService
 from backend.infrastructure.event_log import EventLog
+from backend.infrastructure.fuzzy_matcher import FuzzyMatcher
 from backend.infrastructure.hash_registry import HashRegistry
 from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
@@ -34,6 +41,9 @@ _scheduler_disabled: bool = False  # Memoized when SCHEDULED_REBUILD_ENABLED=fal
 _embedder: EmbeddingService | None = None
 _qdrant: QdrantAdapter | None = None
 _event_log: EventLog | None = None
+_fuzzy_matcher: FuzzyMatcher | None = None
+_fuzzy_refresh_lock = threading.Lock()
+_fuzzy_refresh_timer: threading.Timer | None = None
 
 
 def initialize_services() -> None:
@@ -80,6 +90,7 @@ def get_index_service() -> IndexService:
             use_polling=use_polling,
             polling_interval=polling_interval,
             hash_registry=hash_registry,
+            on_index_updated=request_search_vocabulary_refresh,
         )
         _index_service.initialize()
 
@@ -114,20 +125,49 @@ def get_scheduler() -> Scheduler | None:
 
 def get_search_service() -> SearchService:
     """Return the singleton SearchService, creating it on first call."""
-    global _search_service, _embedder, _qdrant  # noqa: PLW0603
+    global _search_service, _embedder, _qdrant, _fuzzy_matcher  # noqa: PLW0603
     if _search_service is None:
         settings = get_settings()
         _embedder = _embedder or EmbeddingService()
         _qdrant = _qdrant or QdrantAdapter()
+        _fuzzy_matcher = _fuzzy_matcher or FuzzyMatcher()
 
         _search_service = SearchService(
             embedder=_embedder,
             qdrant_adapter=_qdrant,
+            fuzzy_matcher=_fuzzy_matcher,
             include_query_text_in_logs=settings.log_include_query_text,
         )
+        refresh_search_vocabulary()
         logger.info("Initialized SearchService")
 
     return _search_service
+
+
+def refresh_search_vocabulary() -> None:
+    """Refresh fuzzy vocabulary from the latest indexed corpus."""
+    if _search_service is None:
+        return
+    try:
+        _search_service.refresh_fuzzy_vocabulary()
+    except Exception:
+        logger.exception("Failed to refresh fuzzy vocabulary")
+
+
+def request_search_vocabulary_refresh() -> None:
+    """Coalesce frequent refresh requests into one debounced refresh."""
+    global _fuzzy_refresh_timer  # noqa: PLW0603
+    if _search_service is None:
+        return
+    with _fuzzy_refresh_lock:
+        if _fuzzy_refresh_timer is not None:
+            _fuzzy_refresh_timer.cancel()
+        _fuzzy_refresh_timer = threading.Timer(
+            FUZZY_REFRESH_DEBOUNCE_SECONDS,
+            refresh_search_vocabulary,
+        )
+        _fuzzy_refresh_timer.daemon = True
+        _fuzzy_refresh_timer.start()
 
 
 def get_augment_service() -> AugmentService:

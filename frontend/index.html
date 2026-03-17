@@ -62,11 +62,16 @@
         <button type="submit">Search</button>
       </form>
       <p id="search-meta" class="search-meta" aria-live="polite">Ready for keyword search</p>
+      <div id="search-did-you-mean" class="did-you-mean" hidden></div>
       <p id="search-deeplink-status" class="deeplink-status" hidden></p>
       <div class="scrollable">
         <ul id="search-results" class="result-list">
           <li class="placeholder">Enter a keyword or phrase to search your vault</li>
         </ul>
+      </div>
+      <div id="search-related-wrap" class="related-wrap" hidden>
+        <h3>Related Notes</h3>
+        <ul id="search-related-notes" class="related-note-list"></ul>
       </div>
     </section>
 

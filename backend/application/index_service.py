@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from backend.domain.constants import POLLING_INTERVAL_SECONDS, WATCH_EXTENSIONS
@@ -35,6 +36,7 @@ class IndexService:
         use_polling: bool = False,
         polling_interval: float = POLLING_INTERVAL_SECONDS,
         hash_registry: HashRegistry | None = None,
+        on_index_updated: Callable[[], None] | None = None,
     ) -> None:
         self._vault_path = vault_path
         self._parser = parser
@@ -51,6 +53,7 @@ class IndexService:
         self._rebuild_lock = threading.Lock()
         self._watcher: FileWatcher | None = None
         self._debouncer: Debouncer | None = None
+        self._on_index_updated = on_index_updated
 
     def initialize(self) -> None:
         """Scan the vault file map and ensure Qdrant collections exist."""
@@ -140,6 +143,7 @@ class IndexService:
                 chunks=chunks_created,
                 duration_s=round(elapsed, 1),
             )
+            self._notify_index_updated()
             return IndexRebuildResponse(
                 status="success",
                 notes_indexed=notes_indexed,
@@ -217,6 +221,8 @@ class IndexService:
                 deleted=deleted,
                 duration_s=round(elapsed, 1),
             )
+            if changed > 0 or deleted > 0:
+                self._notify_index_updated()
         except Exception:
             logger.exception("Incremental rebuild failed")
         finally:
@@ -234,6 +240,7 @@ class IndexService:
         self._qdrant.delete_links_by_source(note_path)
 
         self._index_file(abs_path, note_path)
+        self._notify_index_updated()
 
     def delete_note(self, note_path: str) -> None:
         """Remove a note from the index."""
@@ -241,6 +248,7 @@ class IndexService:
         self._qdrant.delete_links_by_source(note_path)
         self._file_map.remove_file(note_path)
         logger.info("note_deleted_from_index", note_path=note_path)
+        self._notify_index_updated()
 
     def rename_note(self, old_path: str, new_path: str) -> None:
         """Handle file rename/move operation."""
@@ -335,3 +343,12 @@ class IndexService:
         except OSError:
             logger.warning("Failed to read file: %s", path)
             return None
+
+    def _notify_index_updated(self) -> None:
+        """Notify listeners that indexed content changed."""
+        if self._on_index_updated is None:
+            return
+        try:
+            self._on_index_updated()
+        except Exception:
+            logger.exception("index_update_callback_failed")

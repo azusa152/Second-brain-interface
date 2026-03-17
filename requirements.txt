@@ -17,3 +17,4 @@ pillow==11.3.0
 jieba==0.42.1
 sudachipy==0.6.10
 sudachidict_core==20250129
+rapidfuzz==3.14.3

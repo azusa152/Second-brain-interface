@@ -25,6 +25,7 @@ def _make_search_response(query: str = "test", num_results: int = 2) -> SearchRe
         related_notes=[],
         total_hits=num_results,
         search_time_ms=12.3,
+        did_you_mean=None,
     )
 
 
@@ -131,3 +132,13 @@ class TestSearchEndpoint:
         assert "note_title" in result
         assert "content" in result
         assert "score" in result
+
+    def test_search_response_should_include_did_you_mean_field(
+        self, client: TestClient, mock_search_service: MagicMock
+    ) -> None:
+        mock_search_service.search.return_value = _make_search_response()
+
+        resp = client.post("/search", json={"query": "test"})
+
+        body = resp.json()
+        assert "did_you_mean" in body

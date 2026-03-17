@@ -123,7 +123,7 @@ Classify intent, retrieve relevant vault context when needed, and return a fully
 
 ### 2. Search Notes — `POST /search` (raw results)
 
-Hybrid semantic + keyword search over indexed vault content. Returns ranked chunks with scores, related notes via wikilink graph traversal, and heading context.
+Hybrid semantic + keyword search over indexed vault content. The service first searches with the original query; if no hits are found, it may retry with typo-correction for sparse retrieval and return `did_you_mean`. Response includes ranked chunks, related notes via wikilink graph traversal, and heading context.
 
 **Request**:
 ```json
@@ -146,6 +146,7 @@ Hybrid semantic + keyword search over indexed vault content. Returns ranked chun
 ```json
 {
   "query": "database migration decision",
+  "did_you_mean": null,
   "results": [
     {
       "chunk_id": "notes/adr-005.md::0",
@@ -154,7 +155,7 @@ Hybrid semantic + keyword search over indexed vault content. Returns ranked chun
       "content": "We decided to use Flyway for database migrations because...",
       "score": 0.87,
       "heading_context": "Decision",
-      "highlights": [],
+      "highlights": ["... use Flyway for database migrations because ..."],
       "tags": ["#architecture", "#decision"]
     }
   ],

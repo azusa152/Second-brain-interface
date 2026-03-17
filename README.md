@@ -56,6 +56,8 @@ Dashboard search UX includes:
 - Instant keyword search with 300ms debounce
 - `Cmd/Ctrl+K` shortcut to focus search
 - Result count + search latency feedback
+- Fuzzy typo correction fallback with inline **Did you mean** suggestions when initial retrieval has no hits
+- Highlighted snippets, tag pills, and related-note suggestions
 - One-click **Open in Obsidian** links from search results, vault notes, and link relations
 
 If deep links are unavailable, the dashboard shows an inline warning with setup guidance.
@@ -244,6 +246,7 @@ Response:
 ```json
 {
   "query": "database migration decision",
+  "did_you_mean": null,
   "results": [
     {
       "chunk_id": "notes/adr-005.md::0",
@@ -252,11 +255,18 @@ Response:
       "content": "We decided to use Flyway for database migrations because...",
       "score": 0.87,
       "heading_context": "Decision",
-      "highlights": [],
+      "highlights": ["... use Flyway for database migrations because ..."],
       "tags": ["#architecture", "#decision"]
     }
   ],
-  "related_notes": [],
+  "related_notes": [
+    {
+      "note_path": "concepts/flyway.md",
+      "note_title": "flyway",
+      "relationship": "outgoing",
+      "link_count": 2
+    }
+  ],
   "total_hits": 1,
   "search_time_ms": 45.2
 }

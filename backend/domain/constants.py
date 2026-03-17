@@ -6,6 +6,10 @@ CHUNK_OVERLAP = 128  # Overlap between chunks (for context continuity)
 SIMILARITY_THRESHOLD = 0.3  # Min cosine similarity to include in results
 TOP_K_DEFAULT = 5  # Default number of results
 MAX_TOP_K = 20  # Maximum allowed top_k
+FUZZY_MIN_SCORE = 80  # Minimum fuzzy match score for typo correction
+FUZZY_MIN_TERM_LENGTH = 3  # Minimum term length eligible for fuzzy correction
+FUZZY_MAX_CANDIDATES = 5  # Max candidate terms considered per token
+FUZZY_REFRESH_DEBOUNCE_SECONDS = 1.0  # Coalesce frequent vocabulary refresh triggers
 
 # File Watcher
 DEBOUNCE_SECONDS = 2.0  # Wait time before triggering index after file change

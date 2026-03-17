@@ -66,6 +66,8 @@ Response when no personal context needed:
 ### B — Raw search (when you need direct results)
 
 1. `POST /search` with `{"query": "<query>", "top_k": 5}`
+   - Response may include `did_you_mean` when typo-correction fallback is used after an initial no-hit search.
+   - Each result includes `highlights`; use these snippets in UI before raw `content`.
 2. If you want to open a result in Obsidian, call `GET /config/vault` and build:
    `obsidian://open?vault=<vault_name>&file=<note_path_without_md>`
 3. If `/config/vault` returns `is_configured: false`, show the returned `message`

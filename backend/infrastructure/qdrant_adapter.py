@@ -259,6 +259,13 @@ class QdrantAdapter:
             for path, title in sorted(seen.items())
         ]
 
+    def get_fuzzy_vocabulary_sources(self) -> tuple[list[str], list[str]]:
+        """Return note titles and heading contexts used for fuzzy vocabulary."""
+        rows = self._scroll_chunk_payloads(["note_title", "heading_context"])
+        titles = [r["note_title"] for r in rows if r.get("note_title")]
+        headings = [r["heading_context"] for r in rows if r.get("heading_context")]
+        return titles, headings
+
     def _scroll_chunk_payloads(self, fields: list[str]) -> list[dict]:
         """Scroll the chunks collection and return payload dicts for given fields."""
         results: list[dict] = []
