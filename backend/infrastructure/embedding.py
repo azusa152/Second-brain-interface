@@ -1,11 +1,12 @@
 import numpy as np
 from fastembed import SparseTextEmbedding, TextEmbedding
 
+from backend.infrastructure.cjk_tokenizer import nfkc_normalize, tokenize_for_sparse
 from backend.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-_DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+_DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 _DEFAULT_SPARSE_MODEL = "Qdrant/bm25"
 
 
@@ -50,14 +51,18 @@ class EmbeddingService:
         """Embed a single text string (dense)."""
         self._ensure_loaded()
         assert self._model is not None
-        results = list(self._model.embed([text]))
+        results = list(self._model.embed([nfkc_normalize(text)]))
         return self._to_list(results[0])
 
     def embed_text_sparse(self, text: str) -> SparseVector:
-        """Embed a single text string (sparse BM25)."""
+        """Embed a single text string (sparse BM25).
+
+        CJK text is pre-tokenized with language-aware segmentation and POS
+        filtering before being passed to fastembed's whitespace-based BM25.
+        """
         self._ensure_sparse_loaded()
         assert self._sparse_model is not None
-        results = list(self._sparse_model.embed([text]))
+        results = list(self._sparse_model.embed([tokenize_for_sparse(text)]))
         raw = results[0]
         return SparseVector(
             indices=raw.indices.tolist(),
@@ -70,16 +75,20 @@ class EmbeddingService:
             return []
         self._ensure_loaded()
         assert self._model is not None
-        results = list(self._model.embed(texts))
+        results = list(self._model.embed([nfkc_normalize(t) for t in texts]))
         return [self._to_list(v) for v in results]
 
     def embed_batch_sparse(self, texts: list[str]) -> list[SparseVector]:
-        """Embed multiple texts (sparse BM25, batched)."""
+        """Embed multiple texts (sparse BM25, batched).
+
+        CJK text is pre-tokenized with language-aware segmentation and POS
+        filtering before being passed to fastembed's whitespace-based BM25.
+        """
         if not texts:
             return []
         self._ensure_sparse_loaded()
         assert self._sparse_model is not None
-        results = list(self._sparse_model.embed(texts))
+        results = list(self._sparse_model.embed([tokenize_for_sparse(t) for t in texts]))
         return [SparseVector(indices=r.indices.tolist(), values=r.values.tolist()) for r in results]
 
     @staticmethod

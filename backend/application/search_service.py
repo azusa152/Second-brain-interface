@@ -205,7 +205,7 @@ class SearchService:
 
         Skips YAML frontmatter and heading lines, then concatenates the first
         non-empty lines up to SUGGEST_LINKS_QUERY_MAX_CHARS. This keeps the
-        input within all-MiniLM-L6-v2's effective range (~256 tokens / 512 chars).
+        input within the embedding model's effective range (~256 tokens / 512 chars).
         Falls back to a direct truncation if no meaningful body lines are found.
         """
         lines = content.strip().splitlines()

@@ -60,7 +60,8 @@ graph TD
 |-------|-----------|---------|
 | **Backend** | FastAPI (Python 3.12+) | REST API server |
 | **Vector Store** | Qdrant (server mode) | Unified vector + keyword + hybrid search |
-| **Embedding** | fastembed (`all-MiniLM-L6-v2`) | Local text-to-vector conversion (384 dims) |
+| **Embedding** | fastembed (`paraphrase-multilingual-MiniLM-L12-v2`) | Local multilingual text-to-vector conversion (384 dims) |
+| **CJK Tokenization** | jieba (Chinese) + SudachiPy (Japanese) | POS-aware word segmentation for BM25 sparse indexing |
 | **File Watcher** | watchdog | Real-time vault monitoring |
 | **Container** | Docker Compose | Multi-container orchestration (backend + Qdrant) |
 | **Testing** | pytest | Unit and integration tests |
@@ -291,7 +292,7 @@ WATCH_EXTENSIONS = [".md"]  # File types to monitor
 # Qdrant
 QDRANT_COLLECTION_NAME = "obsidian_chunks"
 QDRANT_LINK_COLLECTION_NAME = "obsidian_links"
-EMBEDDING_DIM = 384  # Dimension of all-MiniLM-L6-v2
+EMBEDDING_DIM = 384  # Dimension of paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 ---
@@ -360,7 +361,7 @@ def chunk(self, note_path: str, content: str) -> list[NoteChunk]:
 
 #### Embedding with `fastembed` (`infrastructure/embedding.py`)
 
-**Responsibility**: Convert text to 384-dim vectors using `all-MiniLM-L6-v2`.
+**Responsibility**: Convert text to 384-dim vectors using `paraphrase-multilingual-MiniLM-L12-v2` (multilingual, 50+ languages). CJK text passed to BM25 sparse embedding is pre-tokenized with language-aware segmentation and POS-based stopword filtering via `cjk_tokenizer.py`.
 
 **Why fastembed?** Qdrant's `fastembed` library is optimized for the same models as `sentence-transformers` but with better performance and smaller memory footprint.
 
@@ -372,7 +373,7 @@ def chunk(self, note_path: str, content: str) -> list[NoteChunk]:
 from fastembed import TextEmbedding
 
 class EmbeddingService:
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"):
         self._model = None
         self._model_name = model_name
     
@@ -841,7 +842,7 @@ client.create_collection(
 ```
 
 **Index Strategy**:
-- **Dense vectors**: Semantic embeddings from `fastembed` (all-MiniLM-L6-v2, 384 dims)
+- **Dense vectors**: Semantic embeddings from `fastembed` (paraphrase-multilingual-MiniLM-L12-v2, 384 dims)
 - **Sparse vectors**: Keyword-based vectors for BM25-style matching
 - **Hybrid search**: Qdrant's native RRF (Reciprocal Rank Fusion) combines both automatically
 
@@ -879,7 +880,7 @@ client.create_collection(
 from fastembed import TextEmbedding
 
 # Initialize embedder
-embedder = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+embedder = TextEmbedding(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
 # Prepare query vectors
 query_text = "database migration decision"
@@ -1014,7 +1015,8 @@ ruff==0.1.14
 backend/infrastructure/
 ├── markdown_parser.py
 ├── chunker.py
-├── embedding.py (fastembed usage)
+├── embedding.py (fastembed usage with CJK pre-tokenization)
+├── cjk_tokenizer.py (Chinese/Japanese tokenization + POS filtering)
 ├── qdrant_adapter.py
 └── vault_file_map.py (NEW - wikilink resolution)
 
@@ -1391,7 +1393,7 @@ second-brain-interface/
 
 **Qdrant Optimization**:
 - `fastembed` is maintained by Qdrant team and optimized for their use case
-- Same models as `sentence-transformers` (e.g., `all-MiniLM-L6-v2`) with better performance
+- Same models as `sentence-transformers` (e.g., `paraphrase-multilingual-MiniLM-L12-v2`) with better performance
 
 **Memory Footprint**:
 - `fastembed`: Lazy-loads models, smaller memory overhead

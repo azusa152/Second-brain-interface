@@ -19,6 +19,11 @@ ignore = [
     "B008",   # do-not-perform-function-call-in-default-argument (Depends() pattern)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# CJK-related modules intentionally use full-width and ambiguous Unicode characters
+"backend/infrastructure/cjk_tokenizer.py" = ["RUF001", "RUF002"]
+"tests/test_cjk_tokenizer.py" = ["RUF001", "RUF002"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
 

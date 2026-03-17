@@ -439,13 +439,33 @@ docker compose up -d
 curl -X POST http://localhost:8000/index/rebuild
 ```
 
+## Multilingual Support (CJK)
+
+The service supports Chinese, Japanese, and English content in Obsidian vaults:
+
+- **Dense embeddings** use `paraphrase-multilingual-MiniLM-L12-v2` (50+ languages, 384 dims)
+- **Sparse/BM25 indexing** pre-tokenizes CJK text with language-aware NLP:
+  - **Japanese**: SudachiPy morphological analysis with POS-based stopword filtering (removes particles, auxiliary verbs, symbols — keeps nouns, verbs, adjectives)
+  - **Chinese**: jieba word segmentation with POS-based stopword filtering (removes function words like 的, 了, 关于)
+  - **English**: passed through unchanged (fastembed's BM25 handles whitespace-delimited text natively)
+- **Markdown tags**: `#日記`, `#数据库`, `#データベース` are recognized alongside ASCII tags
+- **Intent classification**: CJK keywords use substring matching (ASCII keywords retain word-boundary precision)
+- **Full-width normalization**: NFKC normalization converts full-width characters (e.g. `１` → `1`) before indexing
+
+CJK tokenizer dependencies (`jieba`, `sudachipy`, `sudachidict_core`) are installed automatically.
+After upgrading, trigger a full re-index to regenerate embeddings:
+
+```bash
+curl -X POST http://localhost:8000/index/rebuild
+```
+
 ## Architecture
 
 ```
 backend/
 ├── domain/          # Pure business logic, Pydantic models
 ├── application/     # Use-case orchestration (services)
-├── infrastructure/  # External system adapters (Qdrant, file watcher)
+├── infrastructure/  # External system adapters (Qdrant, file watcher, CJK tokenizer)
 └── api/             # FastAPI route handlers
 frontend/            # Monitoring dashboard (static HTML/CSS/JS)
 ```

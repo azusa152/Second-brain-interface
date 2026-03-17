@@ -151,6 +151,44 @@ class TestKeywordSignal:
         assert signals.rule_score == pytest.approx(0.5)
 
 
+class TestCjkKeywordSignal:
+    """CJK keywords use substring matching instead of word-boundary regex."""
+
+    def test_cjk_keyword_should_match_in_text(self) -> None:
+        clf = IntentClassifier(keywords=["投資"])
+        signals = clf.classify("投資ポートフォリオの確認", _ZERO_EMBED, [], [])
+        assert signals.rule_score == pytest.approx(0.5)
+        assert any("投資" in s for s in signals.triggered)
+
+    def test_cjk_keyword_should_not_match_when_absent(self) -> None:
+        clf = IntentClassifier(keywords=["投資"])
+        signals = clf.classify("データベース設計について", _ZERO_EMBED, [], [])
+        assert signals.rule_score == 0.0
+
+    def test_mixed_cjk_and_ascii_keywords(self) -> None:
+        clf = IntentClassifier(keywords=["投資", "portfolio"])
+        signals = clf.classify("投資 and portfolio review", _ZERO_EMBED, [], [])
+        assert signals.rule_score == pytest.approx(1.0)
+
+    def test_chinese_keyword_should_match(self) -> None:
+        clf = IntentClassifier(keywords=["数据库"])
+        signals = clf.classify("关于数据库设计", _ZERO_EMBED, [], [])
+        assert signals.rule_score == pytest.approx(0.5)
+
+    def test_kana_only_keyword_should_match(self) -> None:
+        """Kana-only keywords must use substring matching (not \\b regex)."""
+        clf = IntentClassifier(keywords=["データベース"])
+        signals = clf.classify("データベース設計について", _ZERO_EMBED, [], [])
+        assert signals.rule_score == pytest.approx(0.5)
+        assert any("データベース" in s for s in signals.triggered)
+
+    def test_ascii_keyword_should_still_use_word_boundary(self) -> None:
+        """ASCII keywords still use \\b to avoid false positives."""
+        clf = IntentClassifier(keywords=["investment"])
+        signals = clf.classify("reinvestment strategy", _ZERO_EMBED, [], [])
+        assert signals.rule_score == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Temporal Signal
 # ---------------------------------------------------------------------------

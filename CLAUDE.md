@@ -5,7 +5,8 @@
 ## Tech Stack
 - **Backend:** FastAPI (Python 3.12+)
 - **Search Engine:** Qdrant (unified vector + keyword + hybrid search)
-- **Embedding Model:** fastembed (`all-MiniLM-L6-v2`, local, 384 dims)
+- **Embedding Model:** fastembed (`paraphrase-multilingual-MiniLM-L12-v2`, local, 384 dims)
+- **CJK Tokenization:** jieba (Chinese) + SudachiPy (Japanese) for BM25 sparse indexing
 - **File Watcher:** watchdog
 - **Infrastructure:** Docker Compose (multi-container)
 - **Testing:** pytest

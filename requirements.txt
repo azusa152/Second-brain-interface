@@ -13,3 +13,7 @@ markdown-it-py==3.0.0
 # CVE-2026-25990 (PSD loader) fix requires >=12.1.1 but fastembed==0.7.4 caps pillow<12.0.
 # Suppressed in pip-audit — this project processes only Markdown, not PSD images.
 pillow==11.3.0
+# CJK tokenization for multilingual BM25 indexing
+jieba==0.42.1
+sudachipy==0.6.10
+sudachidict_core==20250129

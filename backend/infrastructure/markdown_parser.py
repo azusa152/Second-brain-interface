@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import yaml
 
 from backend.domain.models import NoteMetadata, WikiLink
+from backend.infrastructure.cjk_tokenizer import count_words_cjk_aware
 from backend.infrastructure.vault_file_map import VaultFileMap
 from backend.logging_config import get_logger
 
@@ -12,7 +13,12 @@ logger = get_logger(__name__)
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
-_TAG_RE = re.compile(r"(?:^|\s)#([a-zA-Z][a-zA-Z0-9_/-]*)\b")
+_TAG_RE = re.compile(
+    r"(?:^|\s)#("
+    r"[a-zA-Z\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff]"  # first char
+    r"[a-zA-Z0-9_/\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff-]*"  # rest
+    r")"
+)
 _CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`]+`")
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
@@ -34,7 +40,7 @@ class MarkdownParser:
         tags = self._extract_tags(frontmatter, body)
         links = self._extract_wikilinks(file_path, body)
         clean_text = self._strip_formatting(body)
-        word_count = len(clean_text.split())
+        word_count = count_words_cjk_aware(clean_text)
 
         if last_modified is None:
             last_modified = datetime.now(tz=UTC)

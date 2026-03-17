@@ -131,6 +131,51 @@ class TestWikilinkExtraction:
         assert links[0].resolved_target_path is None
 
 
+class TestCjkTagExtraction:
+    def test_parse_should_extract_japanese_tags(self) -> None:
+        parser = _make_parser()
+        content = "Text with #日記 tag."
+
+        metadata, _ = parser.parse("test.md", content)
+        assert "日記" in metadata.tags
+
+    def test_parse_should_extract_katakana_tags(self) -> None:
+        parser = _make_parser()
+        content = "Text with #データベース tag."
+
+        metadata, _ = parser.parse("test.md", content)
+        assert "データベース" in metadata.tags
+
+    def test_parse_should_extract_chinese_tags(self) -> None:
+        parser = _make_parser()
+        content = "Text with #数据库 tag."
+
+        metadata, _ = parser.parse("test.md", content)
+        assert "数据库" in metadata.tags
+
+    def test_parse_should_extract_cjk_extension_a_tags(self) -> None:
+        parser = _make_parser()
+        content = "Text with #㐀研究 tag."
+
+        metadata, _ = parser.parse("test.md", content)
+        assert "㐀研究" in metadata.tags
+
+    def test_parse_should_extract_mixed_cjk_ascii_tags(self) -> None:
+        parser = _make_parser()
+        content = "Text with #DB設計 tag."
+
+        metadata, _ = parser.parse("test.md", content)
+        assert "DB設計" in metadata.tags
+
+    def test_parse_should_still_extract_ascii_tags(self) -> None:
+        parser = _make_parser()
+        content = "Text with #python and #日記 tags."
+
+        metadata, _ = parser.parse("test.md", content)
+        assert "python" in metadata.tags
+        assert "日記" in metadata.tags
+
+
 class TestWordCount:
     def test_parse_should_count_words_in_body(self) -> None:
         parser = _make_parser()
@@ -138,6 +183,21 @@ class TestWordCount:
 
         metadata, _ = parser.parse("test.md", content)
         assert metadata.word_count == 5
+
+    def test_parse_should_count_cjk_characters_as_words(self) -> None:
+        parser = _make_parser()
+        content = "---\ntitle: Test\n---\n\n数据库设计"
+
+        metadata, _ = parser.parse("test.md", content)
+        assert metadata.word_count == 5  # 数 + 据 + 库 + 设 + 计 = 5 CJK chars
+
+    def test_parse_should_count_mixed_language_words(self) -> None:
+        parser = _make_parser()
+        content = "---\ntitle: Test\n---\n\nhello 設計 world"
+
+        metadata, _ = parser.parse("test.md", content)
+        # "hello" (1) + "設計" (2 CJK chars) + "world" (1) = 4
+        assert metadata.word_count == 4
 
 
 class TestGetBody:

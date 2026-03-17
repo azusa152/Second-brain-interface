@@ -1,7 +1,7 @@
 """Multi-signal intent classifier for personal knowledge retrieval routing.
 
 Combines three orthogonal signals:
-  1. Keyword signal  — fast word-boundary regex matching against domain keywords
+  1. Keyword signal  — CJK-aware keyword matching against domain keywords
   2. Semantic signal — cosine similarity against pre-computed domain anchor embeddings
   3. Temporal signal — regex detection of time references indicating personal context
 
@@ -10,6 +10,7 @@ The classifier is stateless after construction: classify() is a pure function.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -20,6 +21,7 @@ from backend.domain.constants import (
     INTENT_SEMANTIC_WEIGHT,
     INTENT_TEMPORAL_WEIGHT,
 )
+from backend.infrastructure.cjk_tokenizer import has_cjk, has_japanese_kana
 
 # Compiled temporal patterns. Covers the most common personal-context time references.
 _TEMPORAL_PATTERNS: list[re.Pattern[str]] = [
@@ -87,6 +89,17 @@ def strip_politeness_prefix(message: str) -> str:
     return _POLITENESS_PREFIX.sub("", message).strip()
 
 
+def _build_keyword_matcher(kw: str) -> tuple[str, re.Pattern[str] | None]:
+    """Build a keyword matcher pair.
+
+    For ASCII-only keywords, returns a compiled \\b-bounded regex.
+    For keywords containing CJK characters, returns None (use substring match).
+    """
+    if has_cjk(kw) or has_japanese_kana(kw):
+        return (kw, None)
+    return (kw, re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE))
+
+
 class IntentClassifier:
     """Stateless multi-signal classifier.
 
@@ -100,9 +113,8 @@ class IntentClassifier:
         keywords: list[str],
         temporal_patterns: list[re.Pattern[str]] | None = None,
     ) -> None:
-        # Compile keyword → word-boundary pattern pairs once
-        self._keyword_patterns: list[tuple[str, re.Pattern[str]]] = [
-            (kw, re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)) for kw in keywords
+        self._keyword_matchers: list[tuple[str, re.Pattern[str] | None]] = [
+            _build_keyword_matcher(kw) for kw in keywords
         ]
         self._temporal_patterns = temporal_patterns or _TEMPORAL_PATTERNS
 
@@ -127,9 +139,15 @@ class IntentClassifier:
         triggered: list[str] = []
 
         # --- Signal 1: Keyword ---
-        matched_keywords: list[str] = [
-            kw for kw, pat in self._keyword_patterns if pat.search(message)
-        ]
+        normalized = unicodedata.normalize("NFKC", message)
+        lowered = normalized.lower()
+        matched_keywords: list[str] = []
+        for kw, pat in self._keyword_matchers:
+            if pat is not None:
+                if pat.search(message):
+                    matched_keywords.append(kw)
+            elif kw.lower() in lowered:
+                matched_keywords.append(kw)
         rule_score = min(1.0, len(matched_keywords) / 2)
         for kw in matched_keywords:
             triggered.append(f"keyword:{kw.replace(' ', '_')}")

@@ -23,12 +23,13 @@ INTENT_THRESHOLD = 0.5  # Min composite score to trigger personal context retrie
 INTENT_RULE_WEIGHT = 0.4  # Weight for keyword signal
 INTENT_SEMANTIC_WEIGHT = 0.4  # Weight for embedding similarity signal
 INTENT_TEMPORAL_WEIGHT = 0.2  # Weight for temporal heuristic signal
-# Min cosine similarity for semantic signal to contribute (all-MiniLM-L6-v2 scores are lower
-# than intuition suggests; most semantically-similar pairs fall in the 0.3-0.7 range)
+# Min cosine similarity for semantic signal to contribute (multilingual-MiniLM scores are
+# lower than intuition suggests; most semantically-similar pairs fall in the 0.3-0.7 range)
 INTENT_SEMANTIC_SIMILARITY_MIN = 0.3
 
-# Default personal-domain keywords. All matching uses word boundaries (\b) to avoid false
-# positives. Overly broad single words ("my", "review", "past", "history") are excluded.
+# Default personal-domain keywords. ASCII keywords use word boundaries (\b) to avoid
+# false positives; CJK keywords use NFKC-normalized substring matching.
+# Overly broad single words ("my", "review", "past", "history") are excluded.
 INTENT_DEFAULT_KEYWORDS: list[str] = [
     "investment",
     "portfolio",
@@ -77,4 +78,4 @@ EVENT_LOG_MAXLEN = 100  # Max events kept in ring buffer
 # Qdrant
 QDRANT_COLLECTION_NAME = "obsidian_chunks"
 QDRANT_LINK_COLLECTION_NAME = "obsidian_links"
-EMBEDDING_DIM = 384  # Dimension of all-MiniLM-L6-v2
+EMBEDDING_DIM = 384  # Dimension of paraphrase-multilingual-MiniLM-L12-v2
