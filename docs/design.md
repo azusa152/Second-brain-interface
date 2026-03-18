@@ -1260,7 +1260,10 @@ backend/application/
 docker-compose.yml (finalize volumes, health checks, restart policies)
 Dockerfile (finalize non-root user, entrypoint)
 README.md (complete setup instructions, API reference, architecture diagram)
-docs/agents/SKILL.md (agent skill documentation for OpenClaw)
+docs/agents/SKILL.md (compact agent skill for OpenClaw)
+docs/agents/API_REFERENCE.md (full API schemas)
+docs/agents/SEARCH_FILTERS.md (search filter reference)
+docs/agents/DEVELOPER_GUIDE.md (service management and debugging)
 
 tests/
 └── test_e2e.py (end-to-end integration test)
@@ -1277,7 +1280,7 @@ tests/
    - Non-root user in backend container
 4. **Documentation**: 
    - `README.md` with setup, usage, API reference, architecture diagram, Qdrant dashboard instructions
-   - `docs/agents/SKILL.md` for OpenClaw integration
+   - `docs/agents/SKILL.md` for OpenClaw integration (plus `API_REFERENCE.md`, `SEARCH_FILTERS.md`, `DEVELOPER_GUIDE.md`)
 5. **E2E Tests**: Full workflow test (index vault → search → verify results)
 
 #### Done Criteria
@@ -1374,7 +1377,10 @@ second-brain-interface/
 ├── docs/
 │   ├── design.md (this file)
 │   └── agents/
-│       └── SKILL.md
+│       ├── SKILL.md
+│       ├── API_REFERENCE.md
+│       ├── SEARCH_FILTERS.md
+│       └── DEVELOPER_GUIDE.md
 ├── .cursor/
 │   └── rules/
 │       ├── project-core.mdc

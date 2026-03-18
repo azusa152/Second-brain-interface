@@ -33,5 +33,5 @@ alwaysApply: true
 - **Language:** All logs, error messages, and documentation must be in **English**.
 - **Documentation Sync:** Any feature addition, modification, or removal MUST include updates to the corresponding documentation:
   - `README.md` — Update feature list, API reference, architecture diagrams, examples, and project structure as needed.
-  - Agent Skill Docs (`docs/agents/SKILL.md`) — Update endpoint tables, query examples, and response format to match API changes.
+  - Agent Skill Docs (`docs/agents/`) — Update `SKILL.md` (endpoint table, workflows), `API_REFERENCE.md` (schemas), `SEARCH_FILTERS.md` (filter fields), and `DEVELOPER_GUIDE.md` (service management, debug) as needed.
   - Never leave documentation out of date after a code change.

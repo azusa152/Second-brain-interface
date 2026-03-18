@@ -404,6 +404,8 @@ and any local LLM agent running in a browser context to call the API directly.
 
 For full agent integration documentation, see [docs/agents/SKILL.md](docs/agents/SKILL.md).
 For the complete API reference (all endpoints, full schemas), see [docs/agents/API_REFERENCE.md](docs/agents/API_REFERENCE.md).
+For search filter details, see [docs/agents/SEARCH_FILTERS.md](docs/agents/SEARCH_FILTERS.md).
+For service management and debugging, see [docs/agents/DEVELOPER_GUIDE.md](docs/agents/DEVELOPER_GUIDE.md).
 
 ## Note Creation (Agent Workflow)
 
