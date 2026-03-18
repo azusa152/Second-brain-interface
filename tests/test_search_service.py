@@ -2,9 +2,13 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+from qdrant_client.models import FieldCondition, Filter, MatchAny
+
 from backend.application.search_service import SearchService
 from backend.domain.constants import SIMILARITY_THRESHOLD
-from backend.domain.models import SearchRequest, SearchResultItem
+from backend.domain.exceptions import IndexRebuildRequiredError
+from backend.domain.models import SearchFilter, SearchRequest, SearchResultItem
 from backend.infrastructure.embedding import SparseVector
 from backend.infrastructure.fuzzy_matcher import FuzzyMatcher
 
@@ -21,6 +25,8 @@ def _make_search_service() -> tuple[SearchService, MagicMock, MagicMock, MagicMo
     mock_qdrant.hybrid_search.return_value = []
     mock_qdrant.get_related_notes_batch.return_value = {}
     mock_qdrant.get_fuzzy_vocabulary_sources.return_value = ([], [])
+    mock_qdrant.build_query_filter.return_value = None
+    mock_qdrant.has_legacy_chunks_without_prefixes.return_value = False
 
     mock_fuzzy = MagicMock(spec=FuzzyMatcher)
     mock_fuzzy.correct_query.return_value = ("database migration", None)
@@ -215,6 +221,65 @@ class TestSearchResponseFormat:
 
         assert response.results[0].highlights
         assert "deployment pipeline" in response.results[0].highlights[0].lower()
+
+
+class TestSearchFilters:
+    def test_search_with_filters_should_build_and_pass_query_filter(self) -> None:
+        service, _, mock_qdrant, _ = _make_search_service()
+        built_filter = Filter(
+            must=[FieldCondition(key="tags", match=MatchAny(any=["devops"]))],
+        )
+        mock_qdrant.build_query_filter.return_value = built_filter
+
+        request = SearchRequest(
+            query="deployment pipeline",
+            filters=SearchFilter(tags=["devops"]),
+        )
+        service.search(request)
+
+        mock_qdrant.build_query_filter.assert_called_once_with(request.filters)
+        _, kwargs = mock_qdrant.hybrid_search.call_args
+        assert kwargs["query_filter"] == built_filter
+
+    def test_search_without_filters_should_pass_none_query_filter(self) -> None:
+        service, _, mock_qdrant, _ = _make_search_service()
+
+        service.search(SearchRequest(query="deployment pipeline"))
+
+        mock_qdrant.build_query_filter.assert_not_called()
+        _, kwargs = mock_qdrant.hybrid_search.call_args
+        assert kwargs["query_filter"] is None
+
+    def test_search_response_should_echo_applied_filters(self) -> None:
+        service, _, mock_qdrant, _ = _make_search_service()
+        mock_qdrant.hybrid_search.return_value = _make_result_items(1)
+        filters = SearchFilter(
+            tags=["devops"],
+            exclude_tags=["archive"],
+            path_prefix="projects/",
+        )
+
+        response = service.search(SearchRequest(query="deployment", filters=filters))
+
+        assert response.applied_filters == filters
+
+    def test_search_should_raise_rebuild_required_when_legacy_data_exists(self) -> None:
+        service, _, mock_qdrant, _ = _make_search_service()
+        mock_qdrant.has_legacy_chunks_without_prefixes.return_value = True
+
+        with pytest.raises(
+            IndexRebuildRequiredError, match="path_prefix filter requires a full rebuild"
+        ):
+            service.search(
+                SearchRequest(query="test", filters=SearchFilter(path_prefix="projects/"))
+            )
+
+    def test_search_should_skip_rebuild_check_when_no_path_prefix_filter(self) -> None:
+        service, _, mock_qdrant, _ = _make_search_service()
+
+        service.search(SearchRequest(query="test", filters=SearchFilter(tags=["devops"])))
+
+        mock_qdrant.has_legacy_chunks_without_prefixes.assert_not_called()
 
 
 class TestQueryLoggingFields:

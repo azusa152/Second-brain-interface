@@ -4,6 +4,7 @@ import time
 from collections import Counter
 
 from backend.domain.constants import SIMILARITY_THRESHOLD, SUGGEST_LINKS_QUERY_MAX_CHARS
+from backend.domain.exceptions import IndexRebuildRequiredError
 from backend.domain.models import (
     NoteLinkItem,
     RelatedNote,
@@ -63,11 +64,27 @@ class SearchService:
         # 1. Embed and search with original query first
         query_vector = self._embedder.embed_text(request.query)
         sparse_vector = self._embedder.embed_text_sparse(request.query)
+        query_filter = (
+            self._qdrant.build_query_filter(request.filters)
+            if request.filters is not None
+            else None
+        )
+
+        if (
+            request.filters is not None
+            and request.filters.path_prefix
+            and self._qdrant.has_legacy_chunks_without_prefixes()
+        ):
+            raise IndexRebuildRequiredError(
+                "path_prefix filter requires a full rebuild. Run POST /index/rebuild first."
+            )
+
         results = self._qdrant.hybrid_search(
             query_vector=query_vector,
             sparse_vector=sparse_vector,
             top_k=request.top_k,
             threshold=threshold,
+            query_filter=query_filter,
         )
 
         # 2. Fuzzy fallback for sparse query only when original query yields no hits
@@ -81,6 +98,7 @@ class SearchService:
                     sparse_vector=sparse_vector,
                     top_k=request.top_k,
                     threshold=threshold,
+                    query_filter=query_filter,
                 )
                 if results:
                     did_you_mean = suggestion
@@ -111,6 +129,7 @@ class SearchService:
             total_hits=len(results),
             search_time_ms=round(elapsed_ms, 1),
             did_you_mean=did_you_mean,
+            applied_filters=request.filters,
         )
 
     def _enrich_with_related_notes(

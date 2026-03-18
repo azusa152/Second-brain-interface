@@ -131,7 +131,14 @@ Hybrid semantic + keyword search over indexed vault content. The service first s
   "query": "database migration decision",
   "top_k": 5,
   "include_related": true,
-  "threshold": 0.3
+  "threshold": 0.3,
+  "filters": {
+    "tags": ["#architecture", "#decision"],
+    "exclude_tags": ["#archive"],
+    "path_prefix": "projects/",
+    "modified_after": "2025-01-01T00:00:00Z",
+    "modified_before": "2026-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -141,6 +148,10 @@ Hybrid semantic + keyword search over indexed vault content. The service first s
 | `top_k` | int | 5 | Number of results to return (1-20) |
 | `include_related` | bool | true | Include related notes via wikilinks |
 | `threshold` | float | 0.3 | Minimum similarity score filter |
+| `filters` | object | null | Optional metadata filters (`tags`, `exclude_tags`, `path_prefix`, `modified_after`, `modified_before`) |
+
+`filters.path_prefix` uses strict folder-prefix semantics. Example: `projects/` matches
+`projects/infra/plan.md` but not `personal/projects-notes.md`.
 
 **Response** (200):
 ```json
@@ -168,7 +179,14 @@ Hybrid semantic + keyword search over indexed vault content. The service first s
     }
   ],
   "total_hits": 1,
-  "search_time_ms": 45.2
+  "search_time_ms": 45.2,
+  "applied_filters": {
+    "tags": ["#architecture", "#decision"],
+    "exclude_tags": ["#archive"],
+    "path_prefix": "projects/",
+    "modified_after": "2025-01-01T00:00:00Z",
+    "modified_before": "2026-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -176,6 +194,7 @@ Hybrid semantic + keyword search over indexed vault content. The service first s
 
 | Status | Body | Meaning |
 |--------|------|---------|
+| `409` | `{"error_code": "INDEX_REBUILD_REQUIRED", "message": "..."}` | `path_prefix` filter used but index lacks prefix data. Run `POST /index/rebuild` first. |
 | `422` | Pydantic validation detail | Invalid request parameters |
 | `503` | `{"error_code": "SEARCH_UNAVAILABLE", "message": "..."}` | Index not ready |
 

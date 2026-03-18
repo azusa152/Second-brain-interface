@@ -66,8 +66,14 @@ Response when no personal context needed:
 ### B — Raw search (when you need direct results)
 
 1. `POST /search` with `{"query": "<query>", "top_k": 5}`
+   - You can pass optional metadata `filters`:
+     - `tags`: include notes with any listed tags
+     - `exclude_tags`: exclude notes with any listed tags
+     - `path_prefix`: scope to notes under a folder/path prefix (strict prefix match). Returns **409** if the index was built before this feature — run `POST /index/rebuild` first.
+     - `modified_after` / `modified_before`: scope by last-modified datetime range
    - Response may include `did_you_mean` when typo-correction fallback is used after an initial no-hit search.
    - Each result includes `highlights`; use these snippets in UI before raw `content`.
+   - Response includes `applied_filters` (echo of active metadata constraints).
 2. If you want to open a result in Obsidian, call `GET /config/vault` and build:
    `obsidian://open?vault=<vault_name>&file=<note_path_without_md>`
 3. If `/config/vault` returns `is_configured: false`, show the returned `message`
@@ -75,7 +81,15 @@ Response when no personal context needed:
 
 ```json
 POST /search
-{"query": "database migration decision", "top_k": 5}
+{
+  "query": "database migration decision",
+  "top_k": 5,
+  "filters": {
+    "tags": ["devops"],
+    "path_prefix": "projects/",
+    "modified_after": "2025-01-01T00:00:00Z"
+  }
+}
 ```
 
 ### C — Create a note in the vault

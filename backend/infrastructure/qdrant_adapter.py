@@ -4,6 +4,7 @@ import uuid
 from qdrant_client import QdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import (
+    DatetimeRange,
     Distance,
     FieldCondition,
     Filter,
@@ -11,6 +12,7 @@ from qdrant_client.models import (
     FusionQuery,
     MatchAny,
     MatchValue,
+    PayloadSchemaType,
     PointStruct,
     Prefetch,
     SparseVectorParams,
@@ -26,7 +28,13 @@ from backend.domain.constants import (
     QDRANT_LINK_COLLECTION_NAME,
     SIMILARITY_THRESHOLD,
 )
-from backend.domain.models import IndexedNoteItem, NoteChunk, SearchResultItem, WikiLink
+from backend.domain.models import (
+    IndexedNoteItem,
+    NoteChunk,
+    SearchFilter,
+    SearchResultItem,
+    WikiLink,
+)
 from backend.infrastructure.embedding import SparseVector
 from backend.logging_config import get_logger
 
@@ -41,11 +49,13 @@ class QdrantAdapter:
     def __init__(self, url: str | None = None) -> None:
         resolved_url = url or os.getenv("QDRANT_URL", _DEFAULT_URL)
         self.client = QdrantClient(url=resolved_url)
+        self._legacy_prefixes_cache: bool | None = None
 
     def ensure_collections(self) -> None:
         """Create collections if they don't exist."""
         self._ensure_chunks_collection()
         self._ensure_links_collection()
+        self._ensure_payload_indexes()
 
     def _ensure_chunks_collection(self) -> None:
         """Create the obsidian_chunks collection with dense + sparse vectors.
@@ -88,6 +98,32 @@ class QdrantAdapter:
             vectors_config={},
         )
         logger.info("Created collection: %s", QDRANT_LINK_COLLECTION_NAME)
+
+    def _ensure_payload_indexes(self) -> None:
+        """Create payload indexes used by search metadata filters.
+
+        Qdrant returns HTTP 409 when the index already exists.  We treat that
+        as idempotent success and re-raise anything else.
+        """
+        index_fields: dict[str, PayloadSchemaType] = {
+            "tags": PayloadSchemaType.KEYWORD,
+            "note_path": PayloadSchemaType.KEYWORD,
+            "note_path_prefixes": PayloadSchemaType.KEYWORD,
+            "last_modified": PayloadSchemaType.DATETIME,
+        }
+        for field_name, field_schema in index_fields.items():
+            try:
+                self.client.create_payload_index(
+                    collection_name=QDRANT_COLLECTION_NAME,
+                    field_name=field_name,
+                    field_schema=field_schema,
+                )
+            except UnexpectedResponse as err:
+                if err.status_code == 409:
+                    logger.debug("Payload index already exists: %s", field_name)
+                    continue
+                logger.exception("Failed to create payload index: %s", field_name)
+                raise
 
     def _collection_exists(self, name: str) -> bool:
         """Check if a collection exists."""
@@ -138,6 +174,7 @@ class QdrantAdapter:
                     payload={
                         "chunk_id": chunk.chunk_id,
                         "note_path": chunk.note_path,
+                        "note_path_prefixes": self._build_note_path_prefixes(chunk.note_path),
                         "note_title": chunk.note_title,
                         "content": chunk.content,
                         "chunk_index": chunk.chunk_index,
@@ -296,6 +333,7 @@ class QdrantAdapter:
         sparse_vector: SparseVector,
         top_k: int,
         threshold: float = SIMILARITY_THRESHOLD,
+        query_filter: Filter | None = None,
     ) -> list[SearchResultItem]:
         """Hybrid search combining dense + sparse vectors via RRF fusion.
 
@@ -311,6 +349,7 @@ class QdrantAdapter:
                     using="dense",
                     limit=top_k * 2,
                     score_threshold=threshold,
+                    filter=query_filter,
                 ),
                 Prefetch(
                     query=QdrantSparseVector(
@@ -319,11 +358,13 @@ class QdrantAdapter:
                     ),
                     using="sparse",
                     limit=top_k * 2,
+                    filter=query_filter,
                 ),
             ],
             query=FusionQuery(fusion=Fusion.RRF),
             limit=top_k,
             with_payload=True,
+            query_filter=query_filter,
         )
 
         items: list[SearchResultItem] = []
@@ -342,6 +383,126 @@ class QdrantAdapter:
             )
 
         return items
+
+    def has_legacy_chunks_without_prefixes(self) -> bool:
+        """Check if any indexed chunk in a subfolder is missing note_path_prefixes.
+
+        The result is cached after the first check.  A successful rebuild
+        clears the cache via :meth:`mark_prefixes_current`.
+        """
+        if self._legacy_prefixes_cache is not None:
+            return self._legacy_prefixes_cache
+
+        self._legacy_prefixes_cache = self._detect_legacy_prefixes()
+        return self._legacy_prefixes_cache
+
+    def mark_prefixes_current(self) -> None:
+        """Clear the legacy-prefix cache after a successful rebuild."""
+        self._legacy_prefixes_cache = False
+
+    def _detect_legacy_prefixes(self) -> bool:
+        """Scroll all chunks to find any subfolder note missing note_path_prefixes."""
+        offset = None
+        try:
+            while True:
+                points, next_offset = self.client.scroll(
+                    collection_name=QDRANT_COLLECTION_NAME,
+                    limit=256,
+                    offset=offset,
+                    with_payload=["note_path", "note_path_prefixes"],
+                    with_vectors=False,
+                )
+                for point in points:
+                    payload = point.payload or {}
+                    note_path = payload.get("note_path", "")
+                    prefixes = payload.get("note_path_prefixes")
+                    if "/" in note_path and not prefixes:
+                        return True
+                if next_offset is None:
+                    break
+                offset = next_offset
+        except Exception:
+            logger.warning(
+                "legacy_prefix_check_failed — assuming legacy data may exist; "
+                "run POST /index/rebuild to resolve"
+            )
+            return True
+
+        return False
+
+    @staticmethod
+    def build_query_filter(search_filter: SearchFilter) -> Filter | None:
+        """Convert SearchFilter model into Qdrant payload filter."""
+        must_conditions: list[FieldCondition] = []
+        must_not_conditions: list[FieldCondition] = []
+
+        if search_filter.tags:
+            must_conditions.append(
+                FieldCondition(
+                    key="tags",
+                    match=MatchAny(any=search_filter.tags),
+                )
+            )
+
+        if search_filter.exclude_tags:
+            must_not_conditions.append(
+                FieldCondition(
+                    key="tags",
+                    match=MatchAny(any=search_filter.exclude_tags),
+                )
+            )
+
+        if search_filter.path_prefix:
+            normalized_prefix = QdrantAdapter._normalize_path_prefix(search_filter.path_prefix)
+            if normalized_prefix:
+                must_conditions.append(
+                    FieldCondition(
+                        key="note_path_prefixes",
+                        match=MatchAny(any=[normalized_prefix]),
+                    )
+                )
+
+        if search_filter.modified_after is not None or search_filter.modified_before is not None:
+            must_conditions.append(
+                FieldCondition(
+                    key="last_modified",
+                    range=DatetimeRange(
+                        gte=search_filter.modified_after,
+                        lte=search_filter.modified_before,
+                    ),
+                )
+            )
+
+        if not must_conditions and not must_not_conditions:
+            return None
+
+        return Filter(
+            must=must_conditions or None,
+            must_not=must_not_conditions or None,
+        )
+
+    @staticmethod
+    def _normalize_path_prefix(path_prefix: str) -> str:
+        """Normalize input prefix into vault-relative slash-suffixed format."""
+        normalized = path_prefix.strip().replace("\\", "/").lstrip("/")
+        if normalized and not normalized.endswith("/"):
+            normalized = f"{normalized}/"
+        return normalized
+
+    @staticmethod
+    def _build_note_path_prefixes(note_path: str) -> list[str]:
+        """Build directory-prefix tokens used for strict path_prefix filtering."""
+        normalized_path = note_path.strip().replace("\\", "/").lstrip("/")
+        if "/" not in normalized_path:
+            return []
+
+        parent_path = normalized_path.rsplit("/", 1)[0]
+        prefixes: list[str] = []
+        current = ""
+        for part in parent_path.split("/"):
+            current = f"{current}{part}/" if current else f"{part}/"
+            prefixes.append(current)
+        return prefixes
 
     def get_related_notes_batch(self, note_paths: set[str]) -> dict[str, list[dict[str, str]]]:
         """Batch-fetch outgoing links and backlinks for a set of note paths.

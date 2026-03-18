@@ -190,6 +190,17 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)  # Max results to return
     include_related: bool = True  # Whether to include graph context
     threshold: float | None = None  # Override default similarity threshold
+    filters: SearchFilter | None = None  # Optional metadata filters (tags/path/date)
+```
+
+```python
+class SearchFilter(BaseModel):
+    """Optional metadata filters for retrieval scoping."""
+    tags: list[str] | None = None
+    exclude_tags: list[str] | None = None
+    path_prefix: str | None = None
+    modified_after: datetime | None = None
+    modified_before: datetime | None = None
 ```
 
 #### `SearchResultItem`
@@ -224,6 +235,7 @@ class SearchResponse(BaseModel):
     related_notes: list[RelatedNote]
     total_hits: int  # Total matches before top_k limit
     search_time_ms: float
+    applied_filters: SearchFilter | None = None  # Echo of active metadata filters
 ```
 
 ### 2.3 Supporting Data Structures
@@ -618,12 +630,14 @@ class SearchService:
 ```
 
 **Workflow**:
-1. Embed the query text using fastembed
-2. Execute hybrid search (Qdrant RRF with dense + sparse vectors)
-3. Filter results below threshold
-4. Limit to top_k
-5. If `include_related=True`: extract note paths from results, call `get_related_notes_batch()` (N+1 optimization), build `RelatedNote` list
-6. Return `SearchResponse`
+1. Embed the query text using fastembed (dense + sparse)
+2. Build optional Qdrant payload filter from `SearchFilter` (tags/path/date)
+3. If `path_prefix` is requested, run a cached legacy-data check (`has_legacy_chunks_without_prefixes`). Raise `IndexRebuildRequiredError` (→ HTTP 409) if chunks without `note_path_prefixes` exist. The result is cached for the adapter's lifetime and cleared after a successful full rebuild via `mark_prefixes_current()`.
+4. Execute hybrid search (Qdrant RRF with dense + sparse vectors + metadata filter)
+5. If no hits and fuzzy matcher is available, retry with typo-corrected sparse query
+6. Filter results below threshold, limit to top_k
+7. If `include_related=True`: extract note paths from results, call `get_related_notes_batch()` (N+1 optimization), build `RelatedNote` list
+8. Return `SearchResponse`
 
 ### 3.3 API Layer
 
@@ -682,7 +696,14 @@ Local development: `http://localhost:8000`
   "query": "database migration decision",
   "top_k": 5,
   "include_related": true,
-  "threshold": null
+  "threshold": null,
+  "filters": {
+    "tags": ["devops"],
+    "exclude_tags": ["archive"],
+    "path_prefix": "projects/",
+    "modified_after": "2025-01-01T00:00:00Z",
+    "modified_before": "2026-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -710,11 +731,25 @@ Local development: `http://localhost:8000`
     }
   ],
   "total_hits": 12,
-  "search_time_ms": 45.3
+  "search_time_ms": 45.3,
+  "applied_filters": {
+    "tags": ["devops"],
+    "exclude_tags": ["archive"],
+    "path_prefix": "projects/",
+    "modified_after": "2025-01-01T00:00:00Z",
+    "modified_before": "2026-01-01T00:00:00Z"
+  }
 }
 ```
 
 **Error Responses**:
+- `409 Conflict` — `path_prefix` filter used but index lacks prefix data (legacy chunks detected)
+  ```json
+  {
+    "error_code": "INDEX_REBUILD_REQUIRED",
+    "message": "path_prefix filter requires a full rebuild. Run POST /index/rebuild first."
+  }
+  ```
 - `503 Service Unavailable` — Index not ready or Qdrant down
   ```json
   {
@@ -832,6 +867,7 @@ client.create_collection(
 {
     "chunk_id": "projects/database-migration.md#chunk0",
     "note_path": "projects/database-migration.md",
+    "note_path_prefixes": ["projects/"],
     "note_title": "Database Migration 2025",
     "content": "We chose Blue-Green deployment because...",
     "chunk_index": 0,
@@ -845,6 +881,7 @@ client.create_collection(
 - **Dense vectors**: Semantic embeddings from `fastembed` (paraphrase-multilingual-MiniLM-L12-v2, 384 dims)
 - **Sparse vectors**: Keyword-based vectors for BM25-style matching
 - **Hybrid search**: Qdrant's native RRF (Reciprocal Rank Fusion) combines both automatically
+- **Payload filter indexes**: keyword indexes on `tags`, `note_path`, `note_path_prefixes`, and datetime index on `last_modified`
 
 ### 5.2 Collection: `obsidian_links`
 

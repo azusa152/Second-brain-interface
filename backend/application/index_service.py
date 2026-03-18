@@ -137,6 +137,7 @@ class IndexService:
             elapsed = time.time() - start_time
             self._last_indexed = datetime.now(tz=UTC)
 
+            self._qdrant.mark_prefixes_current()
             logger.info(
                 "rebuild_complete",
                 notes=notes_indexed,

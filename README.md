@@ -268,7 +268,61 @@ Response:
     }
   ],
   "total_hits": 1,
-  "search_time_ms": 45.2
+  "search_time_ms": 45.2,
+  "applied_filters": null
+}
+```
+
+### Search with metadata filters (tags, path, date)
+
+`POST /search` accepts optional `filters` to constrain retrieval before ranking:
+
+- `tags`: include notes with any of these tags
+- `exclude_tags`: exclude notes with any of these tags
+- `path_prefix`: include notes whose `note_path` matches this folder/prefix
+- `modified_after` / `modified_before`: include notes inside a last-modified datetime window
+
+**Important:** `path_prefix` filtering requires all chunks to carry path-prefix payloads.
+If the index was built before this feature, using `path_prefix` returns **HTTP 409**
+with `error_code: "INDEX_REBUILD_REQUIRED"`. Run a full rebuild to fix this:
+
+```bash
+curl -X POST http://localhost:8000/index/rebuild
+```
+
+```bash
+curl -X POST http://localhost:8000/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "query": "deployment pipeline",
+    "top_k": 10,
+    "filters": {
+      "tags": ["devops", "ci-cd"],
+      "exclude_tags": ["archive"],
+      "path_prefix": "projects/infrastructure/",
+      "modified_after": "2025-01-01T00:00:00Z",
+      "modified_before": "2026-01-01T00:00:00Z"
+    }
+  }'
+```
+
+Filtered response includes an `applied_filters` echo for traceability:
+
+```json
+{
+  "query": "deployment pipeline",
+  "results": [],
+  "related_notes": [],
+  "total_hits": 0,
+  "search_time_ms": 24.5,
+  "did_you_mean": null,
+  "applied_filters": {
+    "tags": ["devops", "ci-cd"],
+    "exclude_tags": ["archive"],
+    "path_prefix": "projects/infrastructure/",
+    "modified_after": "2025-01-01T00:00:00Z",
+    "modified_before": "2026-01-01T00:00:00Z"
+  }
 }
 ```
 
