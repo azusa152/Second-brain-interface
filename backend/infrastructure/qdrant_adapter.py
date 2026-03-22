@@ -1,5 +1,6 @@
 import os
 import uuid
+from typing import Any
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
@@ -433,8 +434,8 @@ class QdrantAdapter:
     @staticmethod
     def build_query_filter(search_filter: SearchFilter) -> Filter | None:
         """Convert SearchFilter model into Qdrant payload filter."""
-        must_conditions: list[FieldCondition] = []
-        must_not_conditions: list[FieldCondition] = []
+        must_conditions: list[Any] = []
+        must_not_conditions: list[Any] = []
 
         if search_filter.tags:
             must_conditions.append(

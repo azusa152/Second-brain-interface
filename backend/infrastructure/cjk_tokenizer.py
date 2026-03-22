@@ -55,15 +55,17 @@ _INVISIBLE_RE = re.compile(
 # We check the first element against this allow-set.
 # ---------------------------------------------------------------------------
 
-_JA_CONTENT_POS = frozenset({
-    "名詞",  # nouns
-    "動詞",  # verbs
-    "形容詞",  # i-adjectives
-    "形状詞",  # na-adjectives (adjectival nouns)
-    "副詞",  # adverbs
-    "連体詞",  # pre-noun adjectival
-    "感動詞",  # interjections (rare, but carry meaning)
-})
+_JA_CONTENT_POS = frozenset(
+    {
+        "名詞",  # nouns
+        "動詞",  # verbs
+        "形容詞",  # i-adjectives
+        "形状詞",  # na-adjectives (adjectival nouns)
+        "副詞",  # adverbs
+        "連体詞",  # pre-noun adjectival
+        "感動詞",  # interjections (rare, but carry meaning)
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Chinese POS tags to REMOVE (function words).
@@ -178,8 +180,7 @@ def _ensure_jieba() -> bool:
     except ImportError:
         _jieba_available = False
         logger.warning(
-            "jieba not installed — Chinese tokenization disabled. "
-            "Install with: pip install jieba"
+            "jieba not installed — Chinese tokenization disabled. Install with: pip install jieba"
         )
     return _jieba_available
 
@@ -227,7 +228,9 @@ def _tokenize_japanese_with_details(
     if not _ensure_sudachi():
         if not collect_debug:
             return text, []
-        return text, [{"surface": text, "pos": "missing_sudachi", "kept": True, "language": "japanese"}]
+        return text, [
+            {"surface": text, "pos": "missing_sudachi", "kept": True, "language": "japanese"}
+        ]
 
     assert _sudachi_tokenizer is not None
     assert _sudachi_split_mode is not None
@@ -263,7 +266,9 @@ def _tokenize_chinese_with_details(
     if not _ensure_jieba():
         if not collect_debug:
             return text, []
-        return text, [{"surface": text, "pos": "missing_jieba", "kept": True, "language": "chinese"}]
+        return text, [
+            {"surface": text, "pos": "missing_jieba", "kept": True, "language": "chinese"}
+        ]
 
     import jieba.posseg as pseg
 
@@ -307,7 +312,9 @@ def _run_sparse_pipeline(
 
         if _is_japanese(segment):
             detected_language = "japanese"
-            tokenized, tokens = _tokenize_japanese_with_details(segment, collect_debug=collect_debug)
+            tokenized, tokens = _tokenize_japanese_with_details(
+                segment, collect_debug=collect_debug
+            )
             if collect_debug:
                 segment_debug.append({"text": segment, "is_cjk": True, "language": "japanese"})
                 token_debug.extend(tokens)

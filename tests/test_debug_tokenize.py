@@ -31,12 +31,12 @@ def test_debug_tokenize_should_return_details_when_enabled() -> None:
 
     response = client.post(
         "/debug/tokenize",
-        json={"text": "\uFF21\uFF29\u200b設計について\ufeff"},
+        json={"text": "\uff21\uff29\u200b設計について\ufeff"},
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["original"] == "\uFF21\uFF29\u200b設計について\ufeff"
+    assert body["original"] == "\uff21\uff29\u200b設計について\ufeff"
     assert body["normalized"].startswith("AI")
     assert body["sanitized"] == "AI設計について"
     assert body["detected_language"] in {"japanese", "chinese", "other"}

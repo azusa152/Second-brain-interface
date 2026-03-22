@@ -35,7 +35,7 @@ class TestDenseNormalization:
         fake = _FakeDenseModel()
         service._model = fake
 
-        _ = service.embed_text("\uFF21\uFF22\uFF23")
+        _ = service.embed_text("\uff21\uff22\uff23")
 
         assert fake.last_inputs == ["ABC"]
 
@@ -44,7 +44,7 @@ class TestDenseNormalization:
         fake = _FakeDenseModel()
         service._model = fake
 
-        _ = service.embed_batch(["\uFF21\uFF22\uFF23", "\uFF11\uFF12\uFF13"])
+        _ = service.embed_batch(["\uff21\uff22\uff23", "\uff11\uff12\uff13"])
 
         assert fake.last_inputs == ["ABC", "123"]
 
@@ -55,7 +55,6 @@ class TestSparseNormalization:
         fake = _FakeSparseModel()
         service._sparse_model = fake
 
-        _ = service.embed_text_sparse("\uFF21\uFF22\uFF23")
+        _ = service.embed_text_sparse("\uff21\uff22\uff23")
 
         assert fake.last_inputs == ["ABC"]
-

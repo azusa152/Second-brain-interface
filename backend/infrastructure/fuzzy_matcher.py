@@ -44,7 +44,8 @@ class FuzzyMatcher:
 
         self._vocabulary = [term for term, _ in term_counter.most_common()]
         self._display_by_term = {
-            term: display_counts.most_common(1)[0][0] for term, display_counts in display_counter.items()
+            term: display_counts.most_common(1)[0][0]
+            for term, display_counts in display_counter.items()
         }
 
     def correct_query(self, query: str) -> tuple[str, str | None]:
