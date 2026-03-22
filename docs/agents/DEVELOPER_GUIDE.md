@@ -62,6 +62,15 @@ Inspect CJK sparse tokenization behavior. Returns normalization, segmentation, a
 | `404` | Debug endpoints disabled (`DEBUG_ENDPOINTS=false`) |
 | `422` | Invalid request body |
 
+## Dashboard — `GET /`
+
+The root URL redirects to the monitoring dashboard with a `307 Temporary Redirect`. Both entry points are equivalent:
+
+- `http://localhost:8000/` → redirects to `/dashboard/`
+- `http://localhost:8000/dashboard/` → serves the dashboard directly
+
+The dashboard is only available when the `frontend/` directory is present (always true in the Docker image; may be absent in bare backend runs).
+
 ## Health Check — `GET /health`
 
 Verify the service is running.

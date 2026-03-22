@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.augment_routes import router as augment_router
@@ -117,6 +117,13 @@ class NoCacheStaticFiles(StaticFiles):
 
 
 # Mount dashboard static files AFTER API routers (StaticFiles is a catch-all).
+# The root redirect is registered in the same guard so both features stay in sync:
+# if the frontend directory is absent, neither the redirect nor the static mount exists.
 _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.isdir(_frontend_dir):
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/dashboard/", status_code=307)
+
     app.mount("/dashboard", NoCacheStaticFiles(directory=_frontend_dir, html=True))

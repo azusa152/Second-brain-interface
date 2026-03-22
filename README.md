@@ -14,6 +14,9 @@ Local RAG middleware that grants OpenClaw (AI Agent) semantic understanding and 
 # Start all services (backend + Qdrant)
 make up
 
+# Open the monitoring dashboard (root URL redirects automatically)
+open http://localhost:8000/
+
 # Verify services are running
 curl http://localhost:8000/health
 # → {"status": "ok", "timestamp": "..."}
@@ -44,8 +47,10 @@ changes take effect without rebuilding the image.
 A built-in monitoring dashboard is available at:
 
 ```
-http://localhost:8000/dashboard
+http://localhost:8000/
 ```
+
+The root URL (`/`) automatically redirects to `/dashboard/`. You can also navigate there directly.
 
 It shows real-time service health, index statistics, recent file watcher events,
 a search playground for testing queries, and a vault browser with note link
