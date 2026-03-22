@@ -25,7 +25,12 @@ from backend.logging_config import get_logger, setup_logging
 
 setup_logging()
 _settings = get_settings()
-setup_logging(log_level=_settings.log_level, json_output=_settings.log_format == "json")
+setup_logging(
+    log_level=_settings.log_level,
+    json_output=_settings.log_format == "json",
+    log_file_enabled=_settings.log_file_enabled,
+    log_dir=_settings.log_dir,
+)
 logger = get_logger(__name__)
 
 

@@ -8,4 +8,9 @@ set -e
 mkdir -p /data
 chown -R appuser:appuser /data
 
+# Ensure the /app/logs directory exists and is owned by the application user.
+# This is required for the TimedRotatingFileHandler to write sbi.log on the bind mount.
+mkdir -p /app/logs
+chown -R appuser:appuser /app/logs
+
 exec gosu appuser "$@"

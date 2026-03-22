@@ -9,7 +9,9 @@
 | `make up` | Start all services (backend + Qdrant), rebuilding images |
 | `make down` | Stop all services |
 | `make restart` | Stop, rebuild, and restart all services |
-| `make logs` | Tail logs from all running services |
+| `make logs` | Tail logs from all running services (stdout, via Docker) |
+| `make logs-backend` | Tail backend logs only (stdout) |
+| `make logs-file` | Tail the current log file on the host (`logs/sbi.log`) |
 | `make build` | Build Docker images without starting |
 
 Use `make restart` after code changes or when the service is unhealthy.
@@ -28,6 +30,37 @@ Use `make restart` after code changes or when the service is unhealthy.
 | `LOG_FORMAT` | `json` | `json` (machine parsing), `console` (local readability) |
 | `LOG_INCLUDE_QUERY_TEXT` | `false` | Keep disabled unless temporarily debugging query flows |
 | `DEBUG_ENDPOINTS` | `false` | Enables developer-only debug APIs (e.g. `POST /debug/tokenize`) |
+| `LOG_FILE_ENABLED` | `true` | Write JSON logs to a file in addition to stdout |
+| `LOG_DIR` | `/app/logs` | Log directory inside the container (bind-mounted to `./logs/` on host) |
+
+## Log Files
+
+When `LOG_FILE_ENABLED=true` (default in Docker), structured JSON logs are written to
+`./logs/sbi.log` on the host. The file rotates daily at UTC midnight; last 3 days are kept.
+
+```
+logs/
+  sbi.log              # active file for the current day
+  sbi.log.2026-03-22   # yesterday
+  sbi.log.2026-03-21   # 2 days ago
+  sbi.log.2026-03-20   # 3 days ago (oldest; older files auto-deleted)
+```
+
+**Useful queries:**
+
+```bash
+# Stream the live log file
+make logs-file
+
+# Filter for errors
+make logs-search QUERY='select(.level=="error")'
+
+# Trace a specific request by ID
+cat logs/sbi.log | jq 'select(.request_id=="<id>")'
+
+# Summarise event counts by level
+cat logs/sbi.log | jq -s 'group_by(.level) | map({level: .[0].level, count: length})'
+```
 
 ## Debug Tokenizer — `POST /debug/tokenize`
 

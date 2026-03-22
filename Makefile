@@ -39,7 +39,7 @@ help: ## Show this help message
 
 ##@ Docker
 
-.PHONY: up down restart build logs logs-backend logs-qdrant status shell clean
+.PHONY: up down restart build logs logs-backend logs-qdrant logs-file logs-search status shell clean
 
 up: ## Start all services (backend + Qdrant)
 	$(COMPOSE) up --build -d
@@ -64,6 +64,13 @@ logs-backend: ## Tail logs from the backend service only
 
 logs-qdrant: ## Tail logs from the Qdrant service only
 	$(COMPOSE) logs -f qdrant
+
+logs-file: ## Tail the current log file on host (waits for file if not yet created)
+	tail -F logs/sbi.log
+
+logs-search: ## Search log file with jq (usage: make logs-search QUERY='select(.level=="error")')
+	@test -n "$(QUERY)" || { echo 'Usage: make logs-search QUERY='"'"'select(.level=="error")'"'"''; exit 1; }
+	@jq '$(QUERY)' logs/sbi.log
 
 shell: ## Open a bash shell inside the running backend container
 	$(COMPOSE) exec backend bash

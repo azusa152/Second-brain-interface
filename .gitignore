@@ -38,3 +38,6 @@ Thumbs.db
 # Docker
 # Local dev override — copy docker-compose.override.yml.example to create
 docker-compose.override.yml
+
+# Log files (bind-mounted from container; never commit)
+logs/

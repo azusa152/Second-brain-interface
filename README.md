@@ -113,6 +113,8 @@ correlation IDs for API tracing.
 | `LOG_FORMAT` | `json` | Log output format (`json` for Docker/aggregation, `console` for local readability) |
 | `LOG_INCLUDE_QUERY_TEXT` | `false` | Include raw query text in logs. Keep disabled by default for privacy. |
 | `DEBUG_ENDPOINTS` | `false` | Enables developer-only debug APIs such as `POST /debug/tokenize`. |
+| `LOG_FILE_ENABLED` | `true` | Write logs to a file in addition to stdout. |
+| `LOG_DIR` | `/app/logs` | Directory for log files inside the container (bind-mounted to `./logs/` on host). |
 
 When `LOG_FORMAT=json`, each log line is machine-parseable and includes fields
 like `timestamp`, `level`, `logger`, and request-scoped `request_id`.
@@ -122,6 +124,39 @@ like `timestamp`, `level`, `logger`, and request-scoped `request_id`.
 LOG_LEVEL=DEBUG
 LOG_FORMAT=console
 ```
+
+### Log Files
+
+When `LOG_FILE_ENABLED=true` (the default in Docker), logs are written to `./logs/sbi.log`
+on the host machine (bind-mounted from `/app/logs` inside the container):
+
+```
+logs/
+  sbi.log              # current day — always the active file
+  sbi.log.2026-03-22   # previous day (rotated at UTC midnight)
+  sbi.log.2026-03-21   # 2 days ago
+  sbi.log.2026-03-20   # 3 days ago (oldest retained; older files deleted automatically)
+```
+
+The file handler always writes newline-delimited JSON, independent of `LOG_FORMAT`.
+This makes log files ideal for post-mortem analysis with `jq`:
+
+```bash
+# Tail the live log file
+make logs-file
+
+# Filter errors across the current log file
+make logs-search QUERY='select(.level=="error")'
+
+# Find all events for a specific request ID
+cat logs/sbi.log | jq 'select(.request_id=="abc-123")'
+
+# Count events by level
+cat logs/sbi.log | jq -s 'group_by(.level) | map({level: .[0].level, count: length})'
+```
+
+> **Local dev (outside Docker):** File logging is disabled by default (`LOG_FILE_ENABLED=false`).
+> Add `LOG_FILE_ENABLED=true` (and optionally `LOG_DIR=./logs`) to `.env` to enable it locally.
 
 ## Local Development
 
