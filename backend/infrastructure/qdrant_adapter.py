@@ -193,7 +193,7 @@ class QdrantAdapter:
                 collection_name=QDRANT_COLLECTION_NAME,
                 points=points,
             )
-            logger.info("Upserted %d chunks", len(points))
+            logger.debug("Upserted %d chunks", len(points))
 
     def bulk_upsert_links(self, links: list[WikiLink]) -> None:
         """Insert or update wikilinks in bulk."""
@@ -221,7 +221,7 @@ class QdrantAdapter:
             collection_name=QDRANT_LINK_COLLECTION_NAME,
             points=points,
         )
-        logger.info("Upserted %d links", len(points))
+        logger.debug("Upserted %d links", len(points))
 
     def delete_by_note_path(self, note_path: str) -> None:
         """Remove all chunks for a given note."""
@@ -236,7 +236,7 @@ class QdrantAdapter:
                 ]
             ),
         )
-        logger.info("Deleted chunks for note: %s", note_path)
+        logger.debug("Deleted chunks for note: %s", note_path)
 
     def delete_links_by_source(self, source_path: str) -> None:
         """Remove all outgoing links for a given note."""

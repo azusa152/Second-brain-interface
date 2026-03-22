@@ -14,6 +14,9 @@ PIP_AUDIT     := $(VENV_BIN)/pip-audit
 PRE_COMMIT    := $(VENV_BIN)/pre-commit
 SRC_DIRS      := backend/ tests/
 
+# jq expression shared by logs-pretty and logs-pretty-follow
+_LOG_JQ_PRETTY := "\(.timestamp) [\(.level | ascii_upcase)] \(.logger): \(.event)" + if .path then " (\(.method) \(.path) \(.status_code) \(.duration_ms)ms)" else "" end
+
 # Guard used by dev targets that require the venv to exist
 _require_venv:
 	@test -f $(PYTHON) || { echo "Error: venv not found. Run 'make setup' first."; exit 1; }
@@ -39,7 +42,7 @@ help: ## Show this help message
 
 ##@ Docker
 
-.PHONY: up down restart build logs logs-backend logs-qdrant logs-file logs-search status shell clean
+.PHONY: up down restart build logs logs-backend logs-qdrant logs-file logs-search logs-pretty logs-pretty-follow logs-errors status shell clean
 
 up: ## Start all services (backend + Qdrant)
 	$(COMPOSE) up --build -d
@@ -71,6 +74,15 @@ logs-file: ## Tail the current log file on host (waits for file if not yet creat
 logs-search: ## Search log file with jq (usage: make logs-search QUERY='select(.level=="error")')
 	@test -n "$(QUERY)" || { echo 'Usage: make logs-search QUERY='"'"'select(.level=="error")'"'"''; exit 1; }
 	@jq '$(QUERY)' logs/sbi.log
+
+logs-pretty: ## Human-readable one-line-per-event view of the log file (requires jq)
+	@jq -r '$(_LOG_JQ_PRETTY)' logs/sbi.log
+
+logs-pretty-follow: ## Live-follow log file in human-readable format (requires jq; waits if file absent)
+	@tail -F logs/sbi.log | jq -r '$(_LOG_JQ_PRETTY)'
+
+logs-errors: ## Show only warnings and errors from the log file
+	@jq 'select(.level == "warning" or .level == "error")' logs/sbi.log
 
 shell: ## Open a bash shell inside the running backend container
 	$(COMPOSE) exec backend bash

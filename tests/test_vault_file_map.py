@@ -1,6 +1,10 @@
 import os
+from pathlib import Path
+
+import pytest
 
 from backend.infrastructure.vault_file_map import VaultFileMap
+from backend.logging_config import setup_logging
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "test_vault")
 
@@ -86,3 +90,72 @@ class TestVaultFileMapUpdate:
         file_map.remove_file("note1.md")
         assert file_map.resolve("note1") is None
         assert file_map.file_count == 4
+
+
+class TestVaultFileMapCollisionLogging:
+    @pytest.fixture()
+    def collision_vault(self, tmp_path: Path) -> Path:
+        """Vault with two files sharing the same stem (duplicate.md in root and sub/)."""
+        (tmp_path / "duplicate.md").write_text("root")
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "duplicate.md").write_text("nested")
+        return tmp_path
+
+    def test_scan_should_log_collision_summary_at_info_when_collisions_exist(
+        self, collision_vault: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Arrange
+        setup_logging(log_level="INFO", json_output=False)
+        file_map = VaultFileMap(str(collision_vault))
+
+        # Act
+        file_map.scan()
+        captured = capsys.readouterr()
+
+        # Assert — summary appears at INFO, includes the count
+        assert "1 name collisions" in captured.out
+        assert "LOG_LEVEL=DEBUG" in captured.out
+
+    def test_scan_should_not_log_individual_collisions_at_info_level(
+        self, collision_vault: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Arrange
+        setup_logging(log_level="INFO", json_output=False)
+        file_map = VaultFileMap(str(collision_vault))
+
+        # Act
+        file_map.scan()
+        captured = capsys.readouterr()
+
+        # Assert — individual path detail is suppressed at INFO
+        assert "resolves to both" not in captured.out
+
+    def test_scan_should_log_individual_collisions_at_debug_level(
+        self, collision_vault: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Arrange
+        setup_logging(log_level="DEBUG", json_output=False)
+        file_map = VaultFileMap(str(collision_vault))
+
+        # Act
+        file_map.scan()
+        captured = capsys.readouterr()
+
+        # Assert — individual path detail surfaces at DEBUG
+        assert "resolves to both" in captured.out
+
+    def test_scan_should_log_simple_message_when_no_collisions(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Arrange
+        setup_logging(log_level="INFO", json_output=False)
+        file_map = VaultFileMap(FIXTURES_DIR)
+
+        # Act
+        file_map.scan()
+        captured = capsys.readouterr()
+
+        # Assert — no collision count in simple message
+        assert "name collisions" not in captured.out
+        assert "scanned 5 files" in captured.out

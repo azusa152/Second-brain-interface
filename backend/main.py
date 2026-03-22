@@ -23,6 +23,14 @@ from backend.application.index_service import IndexService
 from backend.config import get_settings
 from backend.logging_config import get_logger, setup_logging
 
+# Paths polled at high frequency by the dashboard — excluded from access logs
+# to avoid overwhelming the log file with noise.
+_ACCESS_LOG_SKIP_PATHS: frozenset[str] = frozenset({
+    "/health",
+    "/index/events",
+    "/index/status",
+})
+
 setup_logging()
 _settings = get_settings()
 setup_logging(
@@ -85,7 +93,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AccessLogMiddleware, skip_paths={"/health"})
+app.add_middleware(
+    AccessLogMiddleware,
+    skip_paths=_ACCESS_LOG_SKIP_PATHS,
+)
 app.add_middleware(RequestIDMiddleware)
 
 app.include_router(health_router)
