@@ -21,3 +21,7 @@ class ServiceUnavailableError(SecondBrainError):
 
 class NoteNotFoundError(SecondBrainError):
     """Raised when a requested note is not present in the index."""
+
+
+class IndexRebuildRequiredError(SecondBrainError):
+    """Raised when a feature requires a full rebuild before it can be used."""

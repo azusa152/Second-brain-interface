@@ -2,36 +2,7 @@
 
 **Base URL**: `http://localhost:8000` (default; configurable via `SBI_API_PORT` in `.env`)
 
-> This is the complete API reference for developers. For the compact agent skill used by OpenClaw, see [SKILL.md](SKILL.md).
-
-## Service Management
-
-Use `make` commands to control the service lifecycle:
-
-| Command | Description |
-|---------|-------------|
-| `make up` | Start all services (backend + Qdrant), rebuilding images |
-| `make down` | Stop all services |
-| `make restart` | Stop, rebuild, and restart all services |
-| `make logs` | Tail logs from all running services |
-| `make build` | Build Docker images without starting |
-
-> Use `make restart` after code changes or when the service is in an unhealthy state.
-
-## Constraints
-
-- **Read-only vault**: The middleware never modifies Obsidian notes. All operations are read-only, except agents writing notes directly to the vault directory.
-- **Index must be built first**: Before searching, trigger a full index rebuild via `POST /index/rebuild`. The file watcher keeps the index updated after the initial build.
-- **Local only**: All processing (embedding, indexing, search) happens on the user's machine. No external API calls.
-
-## Request Correlation and Logging
-
-- Send `X-Request-ID` on incoming requests to correlate API, application, and infrastructure logs.
-- If missing, the backend generates a request ID and returns it in the response header.
-- Logging environment variables:
-  - `LOG_LEVEL` (default `INFO`)
-  - `LOG_FORMAT` (default `json`; supports `json` or `console`)
-  - `LOG_INCLUDE_QUERY_TEXT` (default `false`; keep disabled for privacy)
+> For the compact agent skill, see [SKILL.md](SKILL.md). For search filter details, see [SEARCH_FILTERS.md](SEARCH_FILTERS.md). For service management and debugging, see [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md).
 
 ## Endpoints
 
@@ -41,7 +12,7 @@ Use `make` commands to control the service lifecycle:
 
 ### 1. Augment Prompt — `POST /augment` ⭐ Recommended
 
-Classify intent, retrieve relevant vault context when needed, and return a fully assembled augmented prompt ready for LLM injection. This is the single-call interface for proactive context retrieval.
+Classify intent, retrieve relevant vault context when needed, and return a fully assembled augmented prompt ready for LLM injection.
 
 **Request**:
 ```json
@@ -78,7 +49,7 @@ Classify intent, retrieve relevant vault context when needed, and return a fully
     ],
     "total_chars": 312
   },
-  "augmented_prompt": "[System: The following context was retrieved from the user's Obsidian knowledge base]\n<context>...</context>\n<instruction>...</instruction>\n\n[User]: What was my investment strategy last year?",
+  "augmented_prompt": "[System: ...]\n<context>...</context>\n<instruction>...</instruction>\n\n[User]: What was my investment strategy last year?",
   "search_time_ms": 48.3
 }
 ```
@@ -96,14 +67,7 @@ Classify intent, retrieve relevant vault context when needed, and return a fully
 }
 ```
 
-**Errors**:
-
-| Status | Body | Meaning |
-|--------|------|---------|
-| `422` | Pydantic validation detail | Invalid request parameters |
-| `503` | `{"error_code": "AUGMENT_UNAVAILABLE", "message": "..."}` | Service not ready |
-
-**Augmented prompt format**: The `augmented_prompt` field uses this structure when context is injected:
+**Augmented prompt format** (when `context_injected: true`):
 ```
 [System: The following context was retrieved from the user's Obsidian knowledge base]
 <context>
@@ -120,9 +84,16 @@ Classify intent, retrieve relevant vault context when needed, and return a fully
 [User]: {original_message}
 ```
 
-### 2. Search Notes — `POST /search` (raw results)
+**Errors**:
 
-Hybrid semantic + keyword search over indexed vault content. Returns ranked chunks with scores, related notes via wikilink graph traversal, and heading context.
+| Status | Body | Meaning |
+|--------|------|---------|
+| `422` | Pydantic validation detail | Invalid request parameters |
+| `503` | `{"error_code": "AUGMENT_UNAVAILABLE", "message": "..."}` | Service not ready |
+
+### 2. Search Notes — `POST /search`
+
+Hybrid semantic + keyword search over indexed vault content. If no hits on the original query, may retry with typo-correction and return `did_you_mean`. Response includes ranked chunks, related notes via wikilink graph traversal, and heading context.
 
 **Request**:
 ```json
@@ -130,21 +101,28 @@ Hybrid semantic + keyword search over indexed vault content. Returns ranked chun
   "query": "database migration decision",
   "top_k": 5,
   "include_related": true,
-  "threshold": 0.3
+  "threshold": 0.3,
+  "filters": {
+    "tags": ["#architecture"],
+    "path_prefix": "projects/",
+    "modified_after": "2025-01-01T00:00:00Z"
+  }
 }
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `query` | string | *required* | Natural language search query |
-| `top_k` | int | 5 | Number of results to return (1-20) |
+| `top_k` | int | 5 | Number of results to return (1–20) |
 | `include_related` | bool | true | Include related notes via wikilinks |
 | `threshold` | float | 0.3 | Minimum similarity score filter |
+| `filters` | object | null | Metadata filters — see [SEARCH_FILTERS.md](SEARCH_FILTERS.md) |
 
 **Response** (200):
 ```json
 {
   "query": "database migration decision",
+  "did_you_mean": null,
   "results": [
     {
       "chunk_id": "notes/adr-005.md::0",
@@ -153,7 +131,7 @@ Hybrid semantic + keyword search over indexed vault content. Returns ranked chun
       "content": "We decided to use Flyway for database migrations because...",
       "score": 0.87,
       "heading_context": "Decision",
-      "highlights": [],
+      "highlights": ["... use Flyway for database migrations because ..."],
       "tags": ["#architecture", "#decision"]
     }
   ],
@@ -166,7 +144,12 @@ Hybrid semantic + keyword search over indexed vault content. Returns ranked chun
     }
   ],
   "total_hits": 1,
-  "search_time_ms": 45.2
+  "search_time_ms": 45.2,
+  "applied_filters": {
+    "tags": ["#architecture"],
+    "path_prefix": "projects/",
+    "modified_after": "2025-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -174,12 +157,13 @@ Hybrid semantic + keyword search over indexed vault content. Returns ranked chun
 
 | Status | Body | Meaning |
 |--------|------|---------|
+| `409` | `{"error_code": "INDEX_REBUILD_REQUIRED", "message": "..."}` | `path_prefix` used but index lacks prefix data — run `POST /index/rebuild` |
 | `422` | Pydantic validation detail | Invalid request parameters |
 | `503` | `{"error_code": "SEARCH_UNAVAILABLE", "message": "..."}` | Index not ready |
 
 ### 3. Suggest Wikilinks — `POST /note/suggest-links`
 
-Analyze draft note content and return suggested wikilinks (existing notes to link to), tags, and related notes from the indexed vault. Use this before writing a new note to the vault to discover connections.
+Analyze draft note content and return suggested wikilinks, tags, and related notes.
 
 **Request**:
 ```json
@@ -194,24 +178,17 @@ Analyze draft note content and return suggested wikilinks (existing notes to lin
 |-------|------|---------|-------------|
 | `content` | string | *required* | Draft note content (markdown) |
 | `title` | string | null | Optional title for better semantic matching |
-| `max_suggestions` | int | 5 | Maximum wikilink suggestions to return (1–20) |
+| `max_suggestions` | int | 5 | Maximum wikilink suggestions (1–20) |
 
 **Response** (200):
 ```json
 {
   "suggested_wikilinks": [
-    {
-      "display_text": "ADR-005: Database Migration Strategy",
-      "target_path": "notes/adr-005.md",
-      "score": 0.87
-    }
+    {"display_text": "ADR-005: Database Migration Strategy", "target_path": "notes/adr-005.md", "score": 0.87}
   ],
   "suggested_tags": ["#database", "#architecture", "#decision"],
   "related_notes": [
-    {
-      "note_path": "concepts/flyway.md",
-      "note_title": "flyway"
-    }
+    {"note_path": "concepts/flyway.md", "note_title": "flyway"}
   ]
 }
 ```
@@ -225,7 +202,7 @@ Analyze draft note content and return suggested wikilinks (existing notes to lin
 
 ### 4. Rebuild Index — `POST /index/rebuild`
 
-Trigger a full re-index of all `.md` files in the vault. Deletes existing data and re-indexes from scratch. The file watcher automatically keeps the index updated after this.
+Full re-index of all `.md` files. Deletes existing data and re-indexes from scratch. File watcher keeps the index updated after this.
 
 **Request**: No body required.
 
@@ -247,7 +224,7 @@ Trigger a full re-index of all `.md` files in the vault. Deletes existing data a
 
 ### 5. Index Status — `GET /index/status`
 
-Check the current state of the index: how many notes and chunks are indexed, whether the file watcher is active, and if Qdrant is reachable.
+Check index state: note/chunk counts, watcher status, and Qdrant health.
 
 **Response** (200):
 ```json
@@ -262,7 +239,7 @@ Check the current state of the index: how many notes and chunks are indexed, whe
 
 ### 6. Note Links — `GET /note/{path}/links`
 
-Get all outgoing wikilinks and backlinks for a specific note. Useful for graph exploration and understanding note relationships.
+Get outgoing wikilinks and backlinks for a note.
 
 **Example**: `GET /note/notes/adr-005.md/links`
 
@@ -286,109 +263,28 @@ Get all outgoing wikilinks and backlinks for a specific note. Useful for graph e
 |--------|------|---------|
 | `404` | `{"error_code": "NOTE_NOT_FOUND", "message": "..."}` | Note not in index |
 
-### 7. Watcher Events — `GET /index/events`
+### 7. Indexed Notes — `GET /index/notes`
 
-List recent file watcher events (newest first). Useful for understanding what changes the watcher has detected and verifying that live indexing is working.
-
-**Query Parameters**:
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `limit` | int | 50 | Number of events to return (1-100) |
-
-**Example**: `GET /index/events?limit=10`
-
-**Response** (200):
-```json
-{
-  "events": [
-    {
-      "event_type": "modified",
-      "file_path": "notes/adr-005.md",
-      "timestamp": "2025-02-15T10:32:00Z",
-      "dest_path": null
-    },
-    {
-      "event_type": "moved",
-      "file_path": "drafts/idea.md",
-      "timestamp": "2025-02-15T10:31:00Z",
-      "dest_path": "notes/idea.md"
-    }
-  ],
-  "total": 2
-}
-```
-
-Event types: `created`, `modified`, `deleted`, `moved`. The `dest_path` field is only populated for `moved` events.
-
-### 8. Indexed Notes — `GET /index/notes`
-
-List all notes currently in the index with their paths and titles. Useful for verifying index coverage and browsing available content.
-
-**Request**: No parameters.
+List all notes in the index with paths and titles.
 
 **Response** (200):
 ```json
 {
   "notes": [
-    {
-      "note_path": "notes/adr-005.md",
-      "note_title": "ADR-005: Database Migration Strategy"
-    },
-    {
-      "note_path": "concepts/flyway.md",
-      "note_title": "flyway"
-    }
+    {"note_path": "notes/adr-005.md", "note_title": "ADR-005: Database Migration Strategy"},
+    {"note_path": "concepts/flyway.md", "note_title": "flyway"}
   ],
   "total": 2
 }
 ```
 
-### 9. Classify Intent — `POST /intent/classify`
+### 8. Vault Config — `GET /config/vault`
 
-Classify whether a user message requires personal knowledge retrieval. Returns a confidence score, triggered signal details, and an optional cleaned query. Useful for debugging the intent engine or building custom augmentation flows.
-
-**Request**:
-```json
-{
-  "message": "What was my investment strategy last year?"
-}
-```
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `message` | string | *required* | The user's message to classify |
+Resolve the vault name for Obsidian URI deep links.
 
 **Response** (200):
 ```json
-{
-  "requires_personal_context": true,
-  "confidence": 0.72,
-  "triggered_signals": ["keyword:investment", "temporal:last_year"],
-  "suggested_query": "investment strategy last year"
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `requires_personal_context` | bool | Whether the message needs vault retrieval |
-| `confidence` | float | Composite confidence score (0–1) |
-| `triggered_signals` | list[str] | Signals that fired (e.g., `keyword:*`, `semantic`, `temporal:*`) |
-| `suggested_query` | string \| null | Cleaned query with conversational prefixes stripped |
-
-**Errors**: 422 (Pydantic validation detail — invalid parameters)
-
-### 10. Vault Config — `GET /config/vault`
-
-Resolve the vault name used for Obsidian URI deep links.
-
-**Response** (200):
-```json
-{
-  "vault_name": "my-obsidian-workspace",
-  "is_configured": true,
-  "message": null
-}
+{"vault_name": "my-obsidian-workspace", "is_configured": true, "message": null}
 ```
 
 When vault configuration cannot be resolved:
@@ -400,91 +296,18 @@ When vault configuration cannot be resolved:
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `vault_name` | string | Vault name to use in `obsidian://open` URIs |
-| `is_configured` | bool | Whether deep links are currently usable |
-| `message` | string or null | Optional user-facing troubleshooting guidance |
-
-### 11. Health Check — `GET /health`
-
-Verify the service is running.
-
-**Response** (200):
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-02-15T10:30:00Z"
-}
-```
-
 ## Error Responses
 
 All error responses share a consistent JSON body:
 
 ```json
-{
-  "error_code": "SEARCH_UNAVAILABLE",
-  "message": "Human-readable description of the error."
-}
+{"error_code": "SEARCH_UNAVAILABLE", "message": "Human-readable description of the error."}
 ```
 
 | Status | `error_code` | Meaning |
 |--------|-------------|---------|
 | `409` | `REBUILD_IN_PROGRESS` | A rebuild is already running |
-| `404` | `NOTE_NOT_FOUND` | The requested note is not in the index |
+| `409` | `INDEX_REBUILD_REQUIRED` | Index needs rebuild for requested filter |
+| `404` | `NOTE_NOT_FOUND` | Requested note is not in the index |
 | `503` | `*_UNAVAILABLE` | A backend service is not ready |
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected server error |
-
-## Typical Query Patterns
-
-### Proactive context augmentation (recommended)
-```
-POST /augment
-{"message": "What was my investment strategy last year?"}
-```
-Returns an `augmented_prompt` with vault context already formatted for the LLM, or a pass-through response if no personal context is needed.
-
-### Find information on a topic (raw results)
-```
-POST /search
-{"query": "how does authentication work in our API"}
-```
-
-### Cite a past decision (raw results)
-```
-POST /search
-{"query": "why did we choose PostgreSQL over MongoDB", "top_k": 3}
-```
-
-### Get wikilink suggestions before creating a note
-```
-POST /note/suggest-links
-{"content": "...", "title": "My Draft Note"}
-```
-
-### Explore a note's neighborhood
-```
-GET /note/architecture/auth-system.md/links
-```
-
-### Check if the system is ready
-```
-GET /index/status
-```
-If `indexed_chunks` is 0, trigger a rebuild:
-```
-POST /index/rebuild
-```
-
-### Search without graph enrichment (faster)
-```
-POST /search
-{"query": "deployment checklist", "include_related": false}
-```
-
-### Narrow results with higher threshold
-```
-POST /search
-{"query": "kubernetes pod scheduling", "threshold": 0.5, "top_k": 3}
-```

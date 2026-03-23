@@ -6,11 +6,12 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.augment_routes import router as augment_router
 from backend.api.config_routes import router as config_router
+from backend.api.debug_routes import router as debug_router
 from backend.api.dependencies import get_index_service, get_scheduler, initialize_services
 from backend.api.health_routes import router as health_router
 from backend.api.index_routes import router as index_router
@@ -22,9 +23,24 @@ from backend.application.index_service import IndexService
 from backend.config import get_settings
 from backend.logging_config import get_logger, setup_logging
 
+# Paths polled at high frequency by the dashboard — excluded from access logs
+# to avoid overwhelming the log file with noise.
+_ACCESS_LOG_SKIP_PATHS: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/index/events",
+        "/index/status",
+    }
+)
+
 setup_logging()
 _settings = get_settings()
-setup_logging(log_level=_settings.log_level, json_output=_settings.log_format == "json")
+setup_logging(
+    log_level=_settings.log_level,
+    json_output=_settings.log_format == "json",
+    log_file_enabled=_settings.log_file_enabled,
+    log_dir=_settings.log_dir,
+)
 logger = get_logger(__name__)
 
 
@@ -79,11 +95,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AccessLogMiddleware, skip_paths={"/health"})
+app.add_middleware(
+    AccessLogMiddleware,
+    skip_paths=_ACCESS_LOG_SKIP_PATHS,
+)
 app.add_middleware(RequestIDMiddleware)
 
 app.include_router(health_router)
 app.include_router(config_router)
+if _settings.debug_endpoints:
+    app.include_router(debug_router)
 app.include_router(index_router)
 app.include_router(search_router)
 app.include_router(note_router)
@@ -114,6 +135,13 @@ class NoCacheStaticFiles(StaticFiles):
 
 
 # Mount dashboard static files AFTER API routers (StaticFiles is a catch-all).
+# The root redirect is registered in the same guard so both features stay in sync:
+# if the frontend directory is absent, neither the redirect nor the static mount exists.
 _frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.isdir(_frontend_dir):
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/dashboard/", status_code=307)
+
     app.mount("/dashboard", NoCacheStaticFiles(directory=_frontend_dir, html=True))

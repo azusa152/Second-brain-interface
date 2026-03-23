@@ -239,6 +239,25 @@ main {
   color: var(--text-muted);
 }
 
+.did-you-mean {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: rgba(122, 162, 247, 0.08);
+}
+
+.did-you-mean-action {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+}
+
 .deeplink-status {
   font-size: 0.78rem;
   color: var(--yellow);
@@ -322,14 +341,69 @@ main {
   float: right;
 }
 
-.result-snippet {
+.result-snippet-list {
+  list-style: none;
+  margin-top: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.result-highlight {
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+.result-highlight mark {
+  background: rgba(224, 175, 104, 0.35);
+  color: var(--text-primary);
+  border-radius: 3px;
+  padding: 0 0.15rem;
+}
+
+.result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.result-tag {
+  font-size: 0.7rem;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.08rem 0.42rem;
+}
+
+.related-wrap {
   margin-top: 0.25rem;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.related-wrap h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+.related-note-list {
+  list-style: none;
+}
+
+.related-note-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+  font-size: 0.8rem;
+}
+
+.related-meta {
+  color: var(--text-muted);
+  font-size: 0.72rem;
 }
 
 .loading-spinner {

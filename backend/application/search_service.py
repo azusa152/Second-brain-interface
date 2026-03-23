@@ -1,8 +1,10 @@
 import hashlib
+import re
 import time
 from collections import Counter
 
 from backend.domain.constants import SIMILARITY_THRESHOLD, SUGGEST_LINKS_QUERY_MAX_CHARS
+from backend.domain.exceptions import IndexRebuildRequiredError
 from backend.domain.models import (
     NoteLinkItem,
     RelatedNote,
@@ -14,10 +16,12 @@ from backend.domain.models import (
     SuggestLinksResponse,
 )
 from backend.infrastructure.embedding import EmbeddingService
+from backend.infrastructure.fuzzy_matcher import FuzzyMatcher
 from backend.infrastructure.qdrant_adapter import QdrantAdapter
 from backend.logging_config import get_logger
 
 logger = get_logger(__name__)
+_HIGHLIGHT_TERM_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 
 
 class SearchService:
@@ -27,11 +31,26 @@ class SearchService:
         self,
         embedder: EmbeddingService,
         qdrant_adapter: QdrantAdapter,
+        fuzzy_matcher: FuzzyMatcher | None = None,
         include_query_text_in_logs: bool = False,
     ) -> None:
         self._embedder = embedder
         self._qdrant = qdrant_adapter
+        self._fuzzy_matcher = fuzzy_matcher
         self._include_query_text_in_logs = include_query_text_in_logs
+
+    def refresh_fuzzy_vocabulary(self) -> None:
+        """Rebuild in-memory fuzzy vocabulary from indexed title and heading text."""
+        if self._fuzzy_matcher is None:
+            return
+
+        titles, headings = self._qdrant.get_fuzzy_vocabulary_sources()
+        self._fuzzy_matcher.rebuild_vocabulary(titles=titles, headings=headings)
+        logger.info(
+            "fuzzy_vocabulary_refreshed",
+            title_count=len(titles),
+            heading_count=len(headings),
+        )
 
     def search(self, request: SearchRequest) -> SearchResponse:
         """Execute a hybrid search (dense + sparse) over indexed chunks."""
@@ -39,17 +58,52 @@ class SearchService:
 
         threshold = request.threshold if request.threshold is not None else SIMILARITY_THRESHOLD
 
-        # 1. Embed the query (dense + sparse)
+        sparse_query_used = request.query
+        did_you_mean: str | None = None
+
+        # 1. Embed and search with original query first
         query_vector = self._embedder.embed_text(request.query)
         sparse_vector = self._embedder.embed_text_sparse(request.query)
+        query_filter = (
+            self._qdrant.build_query_filter(request.filters)
+            if request.filters is not None
+            else None
+        )
 
-        # 2. Hybrid search via RRF fusion of dense and sparse results
+        if (
+            request.filters is not None
+            and request.filters.path_prefix
+            and self._qdrant.has_legacy_chunks_without_prefixes()
+        ):
+            raise IndexRebuildRequiredError(
+                "path_prefix filter requires a full rebuild. Run POST /index/rebuild first."
+            )
+
         results = self._qdrant.hybrid_search(
             query_vector=query_vector,
             sparse_vector=sparse_vector,
             top_k=request.top_k,
             threshold=threshold,
+            query_filter=query_filter,
         )
+
+        # 2. Fuzzy fallback for sparse query only when original query yields no hits
+        if not results and self._fuzzy_matcher is not None:
+            corrected_sparse_query, suggestion = self._fuzzy_matcher.correct_query(request.query)
+            if suggestion is not None and corrected_sparse_query != request.query:
+                sparse_query_used = corrected_sparse_query
+                sparse_vector = self._embedder.embed_text_sparse(corrected_sparse_query)
+                results = self._qdrant.hybrid_search(
+                    query_vector=query_vector,
+                    sparse_vector=sparse_vector,
+                    top_k=request.top_k,
+                    threshold=threshold,
+                    query_filter=query_filter,
+                )
+                if results:
+                    did_you_mean = suggestion
+
+        self._apply_highlights(results, request.query, sparse_query_used)
 
         # 3. Graph enrichment: fetch related notes via wikilinks
         related_notes: list[RelatedNote] = []
@@ -74,6 +128,8 @@ class SearchService:
             related_notes=related_notes,
             total_hits=len(results),
             search_time_ms=round(elapsed_ms, 1),
+            did_you_mean=did_you_mean,
+            applied_filters=request.filters,
         )
 
     def _enrich_with_related_notes(
@@ -205,7 +261,7 @@ class SearchService:
 
         Skips YAML frontmatter and heading lines, then concatenates the first
         non-empty lines up to SUGGEST_LINKS_QUERY_MAX_CHARS. This keeps the
-        input within all-MiniLM-L6-v2's effective range (~256 tokens / 512 chars).
+        input within the embedding model's effective range (~256 tokens / 512 chars).
         Falls back to a direct truncation if no meaningful body lines are found.
         """
         lines = content.strip().splitlines()
@@ -250,3 +306,60 @@ class SearchService:
         if self._include_query_text_in_logs:
             fields["query"] = query if preview_length is None else query[:preview_length]
         return fields
+
+    @staticmethod
+    def _apply_highlights(
+        results: list[SearchResultItem],
+        original_query: str,
+        corrected_query: str,
+    ) -> None:
+        """Attach query-term snippet highlights to each search result."""
+        terms = SearchService._extract_highlight_terms(original_query, corrected_query)
+        if not terms:
+            return
+
+        for result in results:
+            result.highlights = SearchService._build_highlights(result.content, terms)
+
+    @staticmethod
+    def _extract_highlight_terms(original_query: str, corrected_query: str) -> list[str]:
+        """Extract deduplicated searchable terms from query text."""
+        terms: set[str] = set()
+        for text in (original_query, corrected_query):
+            for term in _HIGHLIGHT_TERM_PATTERN.findall(text):
+                normalized = term.casefold()
+                if len(normalized) >= 2:
+                    terms.add(normalized)
+        return sorted(terms, key=len, reverse=True)
+
+    @staticmethod
+    def _build_highlights(content: str, terms: list[str]) -> list[str]:
+        """Build compact text snippets around matched terms."""
+        if not content:
+            return []
+
+        content_folded = content.casefold()
+        snippets: list[str] = []
+        seen_ranges: set[tuple[int, int]] = set()
+        max_snippets = 2
+        window = 60
+
+        for term in terms:
+            if len(snippets) >= max_snippets:
+                break
+            start_index = content_folded.find(term)
+            if start_index == -1:
+                continue
+
+            start = max(0, start_index - window)
+            end = min(len(content), start_index + len(term) + window)
+            key = (start, end)
+            if key in seen_ranges:
+                continue
+            seen_ranges.add(key)
+
+            prefix = "... " if start > 0 else ""
+            suffix = " ..." if end < len(content) else ""
+            snippets.append(f"{prefix}{content[start:end].strip()}{suffix}")
+
+        return snippets

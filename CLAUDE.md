@@ -5,7 +5,8 @@
 ## Tech Stack
 - **Backend:** FastAPI (Python 3.12+)
 - **Search Engine:** Qdrant (unified vector + keyword + hybrid search)
-- **Embedding Model:** fastembed (`all-MiniLM-L6-v2`, local, 384 dims)
+- **Embedding Model:** fastembed (`paraphrase-multilingual-MiniLM-L12-v2`, local, 384 dims)
+- **CJK Tokenization:** jieba (Chinese) + SudachiPy (Japanese) for BM25 sparse indexing
 - **File Watcher:** watchdog
 - **Infrastructure:** Docker Compose (multi-container)
 - **Testing:** pytest
@@ -40,3 +41,7 @@ Always read and follow the cursor rules at the start of every task:
 - `second-brain.md` — Product Requirement Document (PRD)
 - `docs/design.md` — Technical design document with phased implementation plan
 - `README.md` — Setup instructions and API reference (created in Phase 6)
+- `docs/agents/SKILL.md` — Compact agent skill (Tier 2, loaded on trigger)
+- `docs/agents/API_REFERENCE.md` — Full API schemas (Tier 3, on demand)
+- `docs/agents/SEARCH_FILTERS.md` — Search filter reference (Tier 3, on demand)
+- `docs/agents/DEVELOPER_GUIDE.md` — Service management and debugging (Tier 3, on demand)

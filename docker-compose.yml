@@ -17,9 +17,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - LOG_FORMAT=${LOG_FORMAT:-json}
       - LOG_INCLUDE_QUERY_TEXT=${LOG_INCLUDE_QUERY_TEXT:-false}
+      - LOG_FILE_ENABLED=${LOG_FILE_ENABLED:-true}
+      - LOG_DIR=/app/logs
     volumes:
       - ${OBSIDIAN_VAULT_PATH:-./_vault}:/vault:ro
       - sbi_data:/data
+      - ./logs:/app/logs
     depends_on:
       qdrant:
         condition: service_healthy

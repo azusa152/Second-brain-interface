@@ -21,6 +21,7 @@ class VaultFileMap:
     def scan(self) -> None:
         """Walk vault directory and build the map."""
         self._map.clear()
+        collision_count = 0
         for root, _dirs, files in os.walk(self._vault_path):
             for filename in files:
                 if not any(filename.endswith(ext) for ext in WATCH_EXTENSIONS):
@@ -29,15 +30,23 @@ class VaultFileMap:
                 rel_path = os.path.relpath(abs_path, self._vault_path)
                 stem = os.path.splitext(filename)[0].lower()
                 if stem in self._map:
-                    logger.warning(
+                    logger.debug(
                         "VaultFileMap name collision: '%s' resolves to both "
                         "'%s' and '%s' (keeping latter)",
                         stem,
                         self._map[stem],
                         rel_path,
                     )
+                    collision_count += 1
                 self._map[stem] = rel_path
-        logger.info("VaultFileMap scanned %d files", len(self._map))
+        if collision_count:
+            logger.info(
+                "VaultFileMap scanned %d files (%d name collisions; set LOG_LEVEL=DEBUG to see details)",
+                len(self._map),
+                collision_count,
+            )
+        else:
+            logger.info("VaultFileMap scanned %d files", len(self._map))
 
     def resolve(self, link_text: str) -> str | None:
         """Resolve [[Link]] to actual file path. Returns None if not found."""

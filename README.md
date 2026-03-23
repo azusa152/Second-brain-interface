@@ -14,6 +14,9 @@ Local RAG middleware that grants OpenClaw (AI Agent) semantic understanding and 
 # Start all services (backend + Qdrant)
 make up
 
+# Open the monitoring dashboard (root URL redirects automatically)
+open http://localhost:8000/
+
 # Verify services are running
 curl http://localhost:8000/health
 # → {"status": "ok", "timestamp": "..."}
@@ -44,8 +47,10 @@ changes take effect without rebuilding the image.
 A built-in monitoring dashboard is available at:
 
 ```
-http://localhost:8000/dashboard
+http://localhost:8000/
 ```
+
+The root URL (`/`) automatically redirects to `/dashboard/`. You can also navigate there directly.
 
 It shows real-time service health, index statistics, recent file watcher events,
 a search playground for testing queries, and a vault browser with note link
@@ -56,6 +61,8 @@ Dashboard search UX includes:
 - Instant keyword search with 300ms debounce
 - `Cmd/Ctrl+K` shortcut to focus search
 - Result count + search latency feedback
+- Fuzzy typo correction fallback with inline **Did you mean** suggestions when initial retrieval has no hits
+- Highlighted snippets, tag pills, and related-note suggestions
 - One-click **Open in Obsidian** links from search results, vault notes, and link relations
 
 If deep links are unavailable, the dashboard shows an inline warning with setup guidance.
@@ -105,6 +112,9 @@ correlation IDs for API tracing.
 | `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
 | `LOG_FORMAT` | `json` | Log output format (`json` for Docker/aggregation, `console` for local readability) |
 | `LOG_INCLUDE_QUERY_TEXT` | `false` | Include raw query text in logs. Keep disabled by default for privacy. |
+| `DEBUG_ENDPOINTS` | `false` | Enables developer-only debug APIs such as `POST /debug/tokenize`. |
+| `LOG_FILE_ENABLED` | `true` | Write logs to a file in addition to stdout. |
+| `LOG_DIR` | `/app/logs` | Directory for log files inside the container (bind-mounted to `./logs/` on host). |
 
 When `LOG_FORMAT=json`, each log line is machine-parseable and includes fields
 like `timestamp`, `level`, `logger`, and request-scoped `request_id`.
@@ -114,6 +124,39 @@ like `timestamp`, `level`, `logger`, and request-scoped `request_id`.
 LOG_LEVEL=DEBUG
 LOG_FORMAT=console
 ```
+
+### Log Files
+
+When `LOG_FILE_ENABLED=true` (the default in Docker), logs are written to `./logs/sbi.log`
+on the host machine (bind-mounted from `/app/logs` inside the container):
+
+```
+logs/
+  sbi.log              # current day — always the active file
+  sbi.log.2026-03-22   # previous day (rotated at UTC midnight)
+  sbi.log.2026-03-21   # 2 days ago
+  sbi.log.2026-03-20   # 3 days ago (oldest retained; older files deleted automatically)
+```
+
+The file handler always writes newline-delimited JSON, independent of `LOG_FORMAT`.
+This makes log files ideal for post-mortem analysis with `jq`:
+
+```bash
+# Tail the live log file
+make logs-file
+
+# Filter errors across the current log file
+make logs-search QUERY='select(.level=="error")'
+
+# Find all events for a specific request ID
+cat logs/sbi.log | jq 'select(.request_id=="abc-123")'
+
+# Count events by level
+cat logs/sbi.log | jq -s 'group_by(.level) | map({level: .[0].level, count: length})'
+```
+
+> **Local dev (outside Docker):** File logging is disabled by default (`LOG_FILE_ENABLED=false`).
+> Add `LOG_FILE_ENABLED=true` (and optionally `LOG_DIR=./logs`) to `.env` to enable it locally.
 
 ## Local Development
 
@@ -195,6 +238,7 @@ Run `make help` to see this list at any time.
 | `GET` | `/index/events` | Recent file watcher events |
 | `GET` | `/index/notes` | List all indexed notes |
 | `GET` | `/note/{path}/links` | Backlinks and outlinks for a note |
+| `POST` | `/debug/tokenize` | Developer-only tokenizer diagnostics (requires `DEBUG_ENDPOINTS=true`) |
 
 ### Augment a prompt with vault context
 
@@ -242,6 +286,7 @@ Response:
 ```json
 {
   "query": "database migration decision",
+  "did_you_mean": null,
   "results": [
     {
       "chunk_id": "notes/adr-005.md::0",
@@ -250,13 +295,74 @@ Response:
       "content": "We decided to use Flyway for database migrations because...",
       "score": 0.87,
       "heading_context": "Decision",
-      "highlights": [],
+      "highlights": ["... use Flyway for database migrations because ..."],
       "tags": ["#architecture", "#decision"]
     }
   ],
-  "related_notes": [],
+  "related_notes": [
+    {
+      "note_path": "concepts/flyway.md",
+      "note_title": "flyway",
+      "relationship": "outgoing",
+      "link_count": 2
+    }
+  ],
   "total_hits": 1,
-  "search_time_ms": 45.2
+  "search_time_ms": 45.2,
+  "applied_filters": null
+}
+```
+
+### Search with metadata filters (tags, path, date)
+
+`POST /search` accepts optional `filters` to constrain retrieval before ranking:
+
+- `tags`: include notes with any of these tags
+- `exclude_tags`: exclude notes with any of these tags
+- `path_prefix`: include notes whose `note_path` matches this folder/prefix
+- `modified_after` / `modified_before`: include notes inside a last-modified datetime window
+
+**Important:** `path_prefix` filtering requires all chunks to carry path-prefix payloads.
+If the index was built before this feature, using `path_prefix` returns **HTTP 409**
+with `error_code: "INDEX_REBUILD_REQUIRED"`. Run a full rebuild to fix this:
+
+```bash
+curl -X POST http://localhost:8000/index/rebuild
+```
+
+```bash
+curl -X POST http://localhost:8000/search \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "query": "deployment pipeline",
+    "top_k": 10,
+    "filters": {
+      "tags": ["devops", "ci-cd"],
+      "exclude_tags": ["archive"],
+      "path_prefix": "projects/infrastructure/",
+      "modified_after": "2025-01-01T00:00:00Z",
+      "modified_before": "2026-01-01T00:00:00Z"
+    }
+  }'
+```
+
+Filtered response includes an `applied_filters` echo for traceability:
+
+```json
+{
+  "query": "deployment pipeline",
+  "results": [],
+  "related_notes": [],
+  "total_hits": 0,
+  "search_time_ms": 24.5,
+  "did_you_mean": null,
+  "applied_filters": {
+    "tags": ["devops", "ci-cd"],
+    "exclude_tags": ["archive"],
+    "path_prefix": "projects/infrastructure/",
+    "modified_after": "2025-01-01T00:00:00Z",
+    "modified_before": "2026-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -338,6 +444,8 @@ and any local LLM agent running in a browser context to call the API directly.
 
 For full agent integration documentation, see [docs/agents/SKILL.md](docs/agents/SKILL.md).
 For the complete API reference (all endpoints, full schemas), see [docs/agents/API_REFERENCE.md](docs/agents/API_REFERENCE.md).
+For search filter details, see [docs/agents/SEARCH_FILTERS.md](docs/agents/SEARCH_FILTERS.md).
+For service management and debugging, see [docs/agents/DEVELOPER_GUIDE.md](docs/agents/DEVELOPER_GUIDE.md).
 
 ## Note Creation (Agent Workflow)
 
@@ -439,13 +547,33 @@ docker compose up -d
 curl -X POST http://localhost:8000/index/rebuild
 ```
 
+## Multilingual Support (CJK)
+
+The service supports Chinese, Japanese, and English content in Obsidian vaults:
+
+- **Dense embeddings** use `paraphrase-multilingual-MiniLM-L12-v2` (50+ languages, 384 dims)
+- **Sparse/BM25 indexing** pre-tokenizes CJK text with language-aware NLP:
+  - **Japanese**: SudachiPy morphological analysis with POS-based stopword filtering (removes particles, auxiliary verbs, symbols — keeps nouns, verbs, adjectives)
+  - **Chinese**: jieba word segmentation with POS-based stopword filtering (removes function words like 的, 了, 关于)
+  - **English**: passed through unchanged (fastembed's BM25 handles whitespace-delimited text natively)
+- **Markdown tags**: `#日記`, `#数据库`, `#データベース` are recognized alongside ASCII tags
+- **Intent classification**: CJK keywords use substring matching (ASCII keywords retain word-boundary precision)
+- **Full-width normalization**: NFKC normalization converts full-width characters (e.g. `１` → `1`) before indexing
+
+CJK tokenizer dependencies (`jieba`, `sudachipy`, `sudachidict_core`) are installed automatically.
+After upgrading, trigger a full re-index to regenerate embeddings:
+
+```bash
+curl -X POST http://localhost:8000/index/rebuild
+```
+
 ## Architecture
 
 ```
 backend/
 ├── domain/          # Pure business logic, Pydantic models
 ├── application/     # Use-case orchestration (services)
-├── infrastructure/  # External system adapters (Qdrant, file watcher)
+├── infrastructure/  # External system adapters (Qdrant, file watcher, CJK tokenizer)
 └── api/             # FastAPI route handlers
 frontend/            # Monitoring dashboard (static HTML/CSS/JS)
 ```

@@ -109,7 +109,10 @@ Every code change that affects the API surface MUST update the agent skill files
 
 | File | What to update |
 |------|----------------|
-| `docs/agents/SKILL.md` | Endpoint table, query examples, response format, usage tips |
+| `docs/agents/SKILL.md` | Endpoint table, workflows, quick reference, error table |
+| `docs/agents/API_REFERENCE.md` | Full request/response schemas for all endpoints |
+| `docs/agents/SEARCH_FILTERS.md` | Filter fields, path_prefix semantics, date validation |
+| `docs/agents/DEVELOPER_GUIDE.md` | Service management, logging config, debug endpoints |
 | `README.md` | API reference section, architecture diagram |
 
 ## When to Update

@@ -1,7 +1,7 @@
 """Tests for settings parsing in backend.config and scheduler wiring in backend.api.dependencies."""
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -165,3 +165,42 @@ class TestGetScheduler:
         fields = {f.name: f for f in jobs[0].trigger.fields}
         assert str(fields["hour"]) == "6"
         assert str(fields["minute"]) == "30"
+
+
+class TestFuzzyVocabularyRefreshDebounce:
+    def teardown_method(self) -> None:
+        from backend.api import dependencies
+
+        dependencies._search_service = None
+        dependencies._fuzzy_refresh_timer = None
+
+    def test_request_refresh_should_noop_without_search_service(self) -> None:
+        from backend.api import dependencies
+
+        dependencies._search_service = None
+        dependencies._fuzzy_refresh_timer = None
+        with patch("backend.api.dependencies.threading.Timer") as mock_timer:
+            dependencies.request_search_vocabulary_refresh()
+
+        mock_timer.assert_not_called()
+
+    def test_request_refresh_should_cancel_previous_timer(self) -> None:
+        from backend.api import dependencies
+
+        dependencies._search_service = MagicMock()
+        dependencies._fuzzy_refresh_timer = None
+        first_timer = MagicMock()
+        second_timer = MagicMock()
+
+        with patch(
+            "backend.api.dependencies.threading.Timer",
+            side_effect=[first_timer, second_timer],
+        ) as mock_timer:
+            dependencies.request_search_vocabulary_refresh()
+            dependencies.request_search_vocabulary_refresh()
+
+        assert mock_timer.call_count == 2
+        first_timer.cancel.assert_called_once()
+        first_timer.start.assert_called_once()
+        second_timer.start.assert_called_once()
+        assert second_timer.daemon is True

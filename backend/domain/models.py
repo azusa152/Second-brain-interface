@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.domain.constants import (
     AUGMENT_TOP_K_DEFAULT,
@@ -50,6 +50,46 @@ class WikiLink(BaseModel):
 # --- Search Models ---
 
 
+class SearchFilter(BaseModel):
+    """Optional metadata filters for narrowing search results."""
+
+    tags: list[str] | None = Field(
+        default=None,
+        description="Include chunks from notes that have ANY of these tags.",
+    )
+    exclude_tags: list[str] | None = Field(
+        default=None,
+        description="Exclude chunks from notes that have ANY of these tags.",
+    )
+    path_prefix: str | None = Field(
+        default=None,
+        description=(
+            "Include chunks where note_path starts with this prefix "
+            "(e.g. 'projects/' for notes under that folder)."
+        ),
+    )
+    modified_after: datetime | None = Field(
+        default=None,
+        description="Include chunks from notes modified at/after this datetime (ISO 8601).",
+    )
+    modified_before: datetime | None = Field(
+        default=None,
+        description="Include chunks from notes modified at/before this datetime (ISO 8601).",
+    )
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "SearchFilter":
+        """Ensure modified date range boundaries are logically valid."""
+        if (
+            self.modified_after is not None
+            and self.modified_before is not None
+            and self.modified_after > self.modified_before
+        ):
+            msg = "modified_after must be less than or equal to modified_before"
+            raise ValueError(msg)
+        return self
+
+
 class SearchRequest(BaseModel):
     """Request body for POST /search."""
 
@@ -57,6 +97,10 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=TOP_K_DEFAULT, ge=1, le=MAX_TOP_K)
     include_related: bool = True
     threshold: float | None = None
+    filters: SearchFilter | None = Field(
+        default=None,
+        description="Optional metadata filters to narrow search scope.",
+    )
 
 
 class SearchResultItem(BaseModel):
@@ -92,6 +136,14 @@ class SearchResponse(BaseModel):
         "Does not represent the total number of matches in the index."
     )
     search_time_ms: float
+    did_you_mean: str | None = Field(
+        default=None,
+        description="Suggested corrected query when fuzzy matching detects likely typos.",
+    )
+    applied_filters: SearchFilter | None = Field(
+        default=None,
+        description="Echo of metadata filters applied during this search.",
+    )
 
 
 # --- Note Links ---
@@ -244,6 +296,45 @@ class IntentClassification(BaseModel):
     confidence: float
     triggered_signals: list[str]
     suggested_query: str | None
+
+
+# --- Debug Tokenization ---
+
+
+class TokenizeRequest(BaseModel):
+    """Request body for POST /debug/tokenize."""
+
+    text: str = Field(min_length=1)
+
+
+class TokenizeSegmentItem(BaseModel):
+    """A segmented text span used during debug tokenization."""
+
+    text: str
+    is_cjk: bool
+    language: Literal["japanese", "chinese", "other"]
+
+
+class TokenizeTokenItem(BaseModel):
+    """A token-level debug record from the tokenizer pipeline."""
+
+    surface: str
+    pos: str
+    kept: bool
+    language: Literal["japanese", "chinese"]
+    normalized: str | None = None
+
+
+class TokenizeResponse(BaseModel):
+    """Response from POST /debug/tokenize."""
+
+    original: str
+    normalized: str
+    sanitized: str
+    detected_language: Literal["japanese", "chinese", "other"]
+    segments: list[TokenizeSegmentItem]
+    sparse_output: str
+    tokens: list[TokenizeTokenItem]
 
 
 # --- Context Augmentation ---
