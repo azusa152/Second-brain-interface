@@ -187,7 +187,9 @@ class IndexService:
             md_files = self._collect_md_files()
             known_paths = self._hash_registry.get_all_known_paths()
 
-            to_reindex: list[tuple[str, str, str, str]] = []  # (abs_path, rel_path, new_hash, content)
+            to_reindex: list[
+                tuple[str, str, str, str]
+            ] = []  # (abs_path, rel_path, new_hash, content)
             skipped = 0
 
             for rel_path in md_files:
