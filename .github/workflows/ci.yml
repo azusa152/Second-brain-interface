@@ -112,6 +112,13 @@ jobs:
 
       - name: Run pip-audit
         run: |
-          # CVE-2026-25990 (Pillow PSD loader) is suppressed: fastembed caps pillow<12.0
-          # and this project processes only Markdown files, not PSD images.
-          pip-audit --desc -r requirements.txt --ignore-vuln CVE-2026-25990
+          # All suppressed CVEs affect Pillow image-processing paths (FITS, PDF, PSD, font/coord APIs)
+          # that this project never exercises — it processes only Markdown files, not images.
+          # fastembed caps pillow<12.0, blocking the 12.2.0 fix; suppress until fastembed lifts the cap.
+          pip-audit --desc -r requirements.txt \
+            --ignore-vuln CVE-2026-25990 \
+            --ignore-vuln CVE-2026-40192 \
+            --ignore-vuln CVE-2026-42308 \
+            --ignore-vuln CVE-2026-42309 \
+            --ignore-vuln CVE-2026-42310 \
+            --ignore-vuln CVE-2026-42311
