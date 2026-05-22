@@ -12,6 +12,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.domain.constants import (
+    INCREMENTAL_REBUILD_RATIO_THRESHOLD,
     POLLING_INTERVAL_MIN_SECONDS,
     POLLING_INTERVAL_SECONDS,
     REBUILD_CRON_HOUR,
@@ -67,6 +68,9 @@ class Settings(BaseSettings):
     startup_incremental_rebuild: bool = True
     rebuild_cron_hour: int = REBUILD_CRON_HOUR
     rebuild_cron_minute: int = REBUILD_CRON_MINUTE
+
+    # Incremental rebuild heuristic
+    incremental_rebuild_ratio_threshold: float = INCREMENTAL_REBUILD_RATIO_THRESHOLD
 
     # Intent classification — comma-separated keyword overrides (empty → use defaults)
     intent_personal_keywords: str = ""

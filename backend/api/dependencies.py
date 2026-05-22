@@ -91,6 +91,7 @@ def get_index_service() -> IndexService:
             polling_interval=polling_interval,
             hash_registry=hash_registry,
             on_index_updated=request_search_vocabulary_refresh,
+            incremental_rebuild_ratio_threshold=settings.incremental_rebuild_ratio_threshold,
         )
         _index_service.initialize()
 

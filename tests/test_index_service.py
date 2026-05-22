@@ -14,6 +14,9 @@ from backend.infrastructure.markdown_parser import MarkdownParser
 from backend.infrastructure.vault_file_map import VaultFileMap
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "test_vault")
+# >1.0 ensures the ratio check never fires regardless of vault size; used to isolate
+# incremental-path tests from the heuristic under test in TestChangeRatioHeuristic.
+_RATIO_CHECK_DISABLED: float = 1.1
 
 
 def _make_service(
@@ -82,7 +85,11 @@ def _make_service_with_registry(
     data_dir: str,
     on_index_updated=None,
 ) -> tuple[IndexService, MagicMock, MagicMock, HashRegistry]:
-    """Create an IndexService wired with a real HashRegistry for incremental rebuild tests."""
+    """Create an IndexService wired with a real HashRegistry for incremental rebuild tests.
+
+    Uses threshold=1.1 to disable the ratio heuristic so small test vaults always
+    exercise the incremental path regardless of change percentage.
+    """
     vault_file_map = VaultFileMap(vault_path)
     parser = MarkdownParser(vault_file_map)
     chunker = Chunker()
@@ -107,6 +114,7 @@ def _make_service_with_registry(
         vault_file_map=vault_file_map,
         hash_registry=hash_registry,
         on_index_updated=on_index_updated,
+        incremental_rebuild_ratio_threshold=_RATIO_CHECK_DISABLED,
     )
     service.initialize()
     return service, mock_qdrant, mock_embedder, hash_registry
@@ -491,3 +499,164 @@ class TestEventRecording:
         assert len(events) == 2
         assert events[0].file_path == "c.md"
         assert events[1].file_path == "b.md"
+
+
+class TestChangeRatioHeuristic:
+    """Tests for the change-ratio heuristic that switches incremental to full rebuild."""
+
+    def _make_ratio_service(
+        self,
+        vault_path: str,
+        data_dir: str,
+        threshold: float = 0.30,
+    ) -> tuple[IndexService, MagicMock, HashRegistry]:
+        vault_file_map = VaultFileMap(vault_path)
+        parser = MarkdownParser(vault_file_map)
+        chunker = Chunker()
+        mock_embedder = MagicMock()
+        mock_embedder.embed_batch.side_effect = lambda texts: [[0.0] * 384 for _ in texts]
+        mock_embedder.embed_batch_sparse.side_effect = lambda texts: [
+            MagicMock(indices=[1], values=[0.5]) for _ in texts
+        ]
+        mock_qdrant = MagicMock()
+        mock_qdrant.is_healthy.return_value = True
+        mock_qdrant.get_chunks_count.return_value = 0
+        mock_qdrant.get_indexed_note_paths.return_value = set()
+        hash_registry = HashRegistry(data_dir)
+        service = IndexService(
+            vault_path=vault_path,
+            parser=parser,
+            chunker=chunker,
+            embedder=mock_embedder,
+            qdrant_adapter=mock_qdrant,
+            vault_file_map=vault_file_map,
+            hash_registry=hash_registry,
+            incremental_rebuild_ratio_threshold=threshold,
+        )
+        service.initialize()
+        return service, mock_qdrant, hash_registry
+
+    @staticmethod
+    def _seed_registry(vault_path: str, hash_registry: HashRegistry, count: int) -> None:
+        """Write current hashes for `count` note files into the registry (simulates prior run)."""
+        from backend.infrastructure.hash_registry import compute_sha256
+
+        for i in range(count):
+            abs_path = os.path.join(vault_path, f"note{i}.md")
+            content = IndexService._read_file(abs_path)
+            if content is None:
+                continue
+            hash_registry.set_hash(f"note{i}.md", compute_sha256(content))
+        hash_registry.save()
+
+    def test_high_ratio_triggers_full_rebuild(self) -> None:
+        """4/10 files changed (ratio=0.4 > 0.3) → full rebuild delegated, incremental writes skipped."""
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as vault_path, tempfile.TemporaryDirectory() as data_dir:
+            for i in range(10):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nOriginal content {i}.")
+            service, mock_qdrant, hash_registry = self._make_ratio_service(vault_path, data_dir)
+            self._seed_registry(vault_path, hash_registry, 10)
+
+            # Modify 4 files → ratio = 4/10 = 0.4 > 0.3
+            for i in range(4):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nUpdated content {i}.")
+
+            # Patch rebuild_index to a no-op so we can confirm it was called without it
+            # triggering its own Qdrant writes (which would pollute the incremental assertion).
+            with patch.object(service, "rebuild_index") as mock_rebuild:
+                service.incremental_rebuild()
+
+            mock_rebuild.assert_called_once()
+            # incremental Phase 2 must NOT have run — no direct _index_file upserts
+            mock_qdrant.bulk_upsert_chunks.assert_not_called()
+
+    def test_low_ratio_stays_incremental(self) -> None:
+        """2/10 files changed (ratio=0.2 < 0.3) → incremental path, no full rebuild."""
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as vault_path, tempfile.TemporaryDirectory() as data_dir:
+            for i in range(10):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nOriginal content {i}.")
+            service, mock_qdrant, hash_registry = self._make_ratio_service(vault_path, data_dir)
+            self._seed_registry(vault_path, hash_registry, 10)
+
+            # Modify 2 files → ratio = 2/10 = 0.2 < 0.3
+            for i in range(2):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nUpdated content {i}.")
+
+            with patch.object(service, "rebuild_index") as mock_rebuild:
+                service.incremental_rebuild()
+
+            mock_rebuild.assert_not_called()
+            assert mock_qdrant.bulk_upsert_chunks.call_count == 2
+
+    def test_boundary_ratio_stays_incremental(self) -> None:
+        """3/10 files changed (ratio=0.3 == threshold) → incremental kept (exclusive threshold)."""
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as vault_path, tempfile.TemporaryDirectory() as data_dir:
+            for i in range(10):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nOriginal content {i}.")
+            service, mock_qdrant, hash_registry = self._make_ratio_service(vault_path, data_dir)
+            self._seed_registry(vault_path, hash_registry, 10)
+
+            # Modify exactly 3 files → ratio = 3/10 = 0.3 == threshold (not >)
+            for i in range(3):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nUpdated content {i}.")
+
+            with patch.object(service, "rebuild_index") as mock_rebuild:
+                service.incremental_rebuild()
+
+            mock_rebuild.assert_not_called()
+            assert mock_qdrant.bulk_upsert_chunks.call_count == 3
+
+    def test_custom_threshold(self) -> None:
+        """Custom threshold=0.5: 4/10 changed stays incremental; 6/10 changed triggers full rebuild."""
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as vault_path, tempfile.TemporaryDirectory() as data_dir:
+            for i in range(10):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nOriginal content {i}.")
+            service, mock_qdrant, hash_registry = self._make_ratio_service(
+                vault_path, data_dir, threshold=0.5
+            )
+            self._seed_registry(vault_path, hash_registry, 10)
+
+            # 4/10 changed → ratio=0.4 < 0.5 → stays incremental
+            for i in range(4):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nUpdated for 4-change test {i}.")
+
+            with patch.object(service, "rebuild_index") as mock_rebuild:
+                service.incremental_rebuild()
+
+            mock_rebuild.assert_not_called()
+            assert mock_qdrant.bulk_upsert_chunks.call_count == 4
+            mock_qdrant.reset_mock()
+
+            # Now 6 more files changed (notes 4-9) on top → ratio = 6/10 = 0.6 > 0.5 → full rebuild
+            # Re-seed registry with current state (notes 0-3 already updated above)
+            self._seed_registry(vault_path, hash_registry, 10)
+            for i in range(4, 10):
+                _write(vault_path, f"note{i}.md", f"# Note {i}\n\nUpdated for 6-change test {i}.")
+
+            with patch.object(service, "rebuild_index") as mock_rebuild:
+                service.incremental_rebuild()
+
+            mock_rebuild.assert_called_once()
+            mock_qdrant.bulk_upsert_chunks.assert_not_called()
+
+    def test_empty_vault_no_crash(self) -> None:
+        """Empty vault (0 files) → no division-by-zero, no rebuild triggered."""
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as vault_path, tempfile.TemporaryDirectory() as data_dir:
+            service, mock_qdrant, _ = self._make_ratio_service(vault_path, data_dir)
+
+            with patch.object(service, "rebuild_index") as mock_rebuild:
+                service.incremental_rebuild()
+
+            mock_rebuild.assert_not_called()
+            mock_qdrant.bulk_upsert_chunks.assert_not_called()
+            mock_qdrant.delete_by_note_path.assert_not_called()

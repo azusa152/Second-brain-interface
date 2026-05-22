@@ -21,6 +21,7 @@ POLLING_INTERVAL_MIN_SECONDS = 0.5  # Minimum allowed polling interval to avoid 
 REBUILD_CRON_HOUR = 3  # Daily rebuild at 03:00 UTC
 REBUILD_CRON_MINUTE = 0
 HASH_REGISTRY_FILENAME = "hash_registry.json"
+INCREMENTAL_REBUILD_RATIO_THRESHOLD: float = 0.30  # Switch to full rebuild above this change ratio
 
 # Intent Classification
 INTENT_THRESHOLD = 0.5  # Min composite score to trigger personal context retrieval
