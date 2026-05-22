@@ -45,3 +45,9 @@ Always read and follow the cursor rules at the start of every task:
 - `docs/agents/API_REFERENCE.md` — Full API schemas (Tier 3, on demand)
 - `docs/agents/SEARCH_FILTERS.md` — Search filter reference (Tier 3, on demand)
 - `docs/agents/DEVELOPER_GUIDE.md` — Service management and debugging (Tier 3, on demand)
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+at `specs/001-change-ratio-heuristic/plan.md`.
+<!-- SPECKIT END -->

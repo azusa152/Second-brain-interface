@@ -4,7 +4,11 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from backend.domain.constants import POLLING_INTERVAL_SECONDS, WATCH_EXTENSIONS
+from backend.domain.constants import (
+    INCREMENTAL_REBUILD_RATIO_THRESHOLD,
+    POLLING_INTERVAL_SECONDS,
+    WATCH_EXTENSIONS,
+)
 from backend.domain.exceptions import RebuildInProgressError
 from backend.domain.models import IndexedNoteItem, IndexRebuildResponse, IndexStatus
 from backend.infrastructure.chunker import Chunker
@@ -37,6 +41,7 @@ class IndexService:
         polling_interval: float = POLLING_INTERVAL_SECONDS,
         hash_registry: HashRegistry | None = None,
         on_index_updated: Callable[[], None] | None = None,
+        incremental_rebuild_ratio_threshold: float = INCREMENTAL_REBUILD_RATIO_THRESHOLD,
     ) -> None:
         self._vault_path = vault_path
         self._parser = parser
@@ -48,6 +53,7 @@ class IndexService:
         self._use_polling = use_polling
         self._polling_interval = polling_interval
         self._hash_registry = hash_registry
+        self._rebuild_ratio_threshold = incremental_rebuild_ratio_threshold
         self._last_indexed: datetime | None = None
         self._last_scheduled_rebuild: datetime | None = None
         self._rebuild_lock = threading.Lock()
@@ -157,9 +163,9 @@ class IndexService:
     def incremental_rebuild(self) -> None:
         """Re-index only files whose SHA-256 content hash has changed since last run.
 
-        Compares all vault .md files against the HashRegistry. Only new or changed
-        files are re-indexed. Files present in the registry but missing from the vault
-        are removed from Qdrant and the registry. Saves the registry once at the end.
+        Phase 1 discovers all changed and deleted files without touching Qdrant.
+        A change-ratio check then decides whether to delegate to a full rebuild
+        (ratio > threshold) or proceed with the incremental writes (Phase 2).
 
         If no HashRegistry was provided, falls back to a full rebuild.
         """
@@ -173,38 +179,63 @@ class IndexService:
             return
 
         start_time = time.time()
-        changed = 0
-        skipped = 0
-        deleted = 0
+        lock_released = False
 
         try:
-            # Refresh file map so wikilink resolution is current for this batch.
-            # This handles the case where the watcher missed new file creations.
+            # Phase 1: Discovery — collect changes without touching Qdrant.
             self._file_map.scan()
             md_files = self._collect_md_files()
-            vault_paths = set(md_files)
             known_paths = self._hash_registry.get_all_known_paths()
+
+            to_reindex: list[
+                tuple[str, str, str, str]
+            ] = []  # (abs_path, rel_path, new_hash, content)
+            skipped = 0
 
             for rel_path in md_files:
                 abs_path = os.path.join(self._vault_path, rel_path)
                 content = self._read_file(abs_path)
                 if content is None:
                     continue
-
                 current_hash = compute_sha256(content)
-                stored_hash = self._hash_registry.get_hash(rel_path)
-
-                if current_hash == stored_hash:
+                if current_hash == self._hash_registry.get_hash(rel_path):
                     skipped += 1
                     continue
+                to_reindex.append((abs_path, rel_path, current_hash, content))
 
+            to_delete: set[str] = known_paths - set(md_files)
+
+            # Ratio check: delegate to full rebuild when change ratio exceeds threshold.
+            # Skip on the first run (empty registry) — all files are legitimately new.
+            total_files = len(md_files)
+            if total_files > 0 and known_paths:
+                ratio = (len(to_reindex) + len(to_delete)) / total_files
+                if ratio > self._rebuild_ratio_threshold:
+                    logger.info(
+                        "change_ratio_exceeded",
+                        ratio=round(ratio, 4),
+                        threshold=self._rebuild_ratio_threshold,
+                        changed=len(to_reindex) + len(to_delete),
+                        total=total_files,
+                        triggering_full_rebuild=True,
+                    )
+                    self._rebuild_lock.release()
+                    lock_released = True
+                    self.rebuild_index()
+                    return
+
+            # Phase 2: Writes — apply discovered changes to Qdrant and HashRegistry.
+            changed = 0
+            deleted = 0
+
+            for abs_path, rel_path, new_hash, content in to_reindex:
                 self._qdrant.delete_by_note_path(rel_path)
                 self._qdrant.delete_links_by_source(rel_path)
-                self._index_file(abs_path, rel_path)
-                self._hash_registry.set_hash(rel_path, current_hash)
+                self._index_content(content, abs_path, rel_path)
+                self._hash_registry.set_hash(rel_path, new_hash)
                 changed += 1
 
-            for stale_path in known_paths - vault_paths:
+            for stale_path in to_delete:
                 self._qdrant.delete_by_note_path(stale_path)
                 self._qdrant.delete_links_by_source(stale_path)
                 self._hash_registry.remove(stale_path)
@@ -227,7 +258,8 @@ class IndexService:
         except Exception:
             logger.exception("Incremental rebuild failed")
         finally:
-            self._rebuild_lock.release()
+            if not lock_released:
+                self._rebuild_lock.release()
 
     def index_single_note(self, note_path: str) -> None:
         """Index or update a single note."""
@@ -301,11 +333,14 @@ class IndexService:
         return sorted(md_files)
 
     def _index_file(self, abs_path: str, rel_path: str) -> int:
-        """Parse, chunk, embed, and store a single file. Returns chunk count."""
+        """Read file from disk, then parse, chunk, embed, and store it. Returns chunk count."""
         content = self._read_file(abs_path)
         if content is None:
             return 0
+        return self._index_content(content, abs_path, rel_path)
 
+    def _index_content(self, content: str, abs_path: str, rel_path: str) -> int:
+        """Parse, chunk, embed, and store pre-read content. Returns chunk count."""
         stat = os.stat(abs_path)
         last_modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
 
